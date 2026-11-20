@@ -1,5 +1,13 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { DiceRoll, isDieValue, StubDiceRoller, type DiceRoller, type DieValue } from './index';
+import {
+  DiceRoll,
+  isDieValue,
+  RandomDiceRoller,
+  StubDiceRoller,
+  type DiceRoller,
+  type DieValue,
+  type RandomBytesSource,
+} from './index';
 
 describe('dice module — DieValue & DiceRoll', () => {
   it('DICE-01: isDieValue accepts integers 1..6', () => {
@@ -92,5 +100,50 @@ describe('dice module — StubDiceRoller', () => {
     expect(() => roller.roll(Number.NaN)).toThrow(RangeError);
     expect(() => roller.roll(Number.POSITIVE_INFINITY)).toThrow(RangeError);
     expect(roller.remaining).toBe(2);
+  });
+});
+
+describe('dice module — RandomDiceRoller', () => {
+  it('DICE-09: default RandomDiceRoller produces valid single and multi-die DiceRolls', () => {
+    const roller = new RandomDiceRoller();
+    for (let i = 0; i < 50; i += 1) {
+      for (const count of [1, 5]) {
+        const result = roller.roll(count);
+        expect(result).toBeInstanceOf(DiceRoll);
+        expect(result.dice).toHaveLength(count);
+        expect(result.dice.every(isDieValue)).toBe(true);
+        expect(result.total).toBe(result.dice.reduce((sum, die) => sum + die, 0));
+      }
+    }
+  });
+
+  it('DICE-10: injected RandomBytesSource maps < 252 via (byte % 6) + 1 and retries bytes >= 252', () => {
+    const stream = [255, 252, 0, 5, 251];
+    let cursor = 0;
+    const source: RandomBytesSource = (buffer) => {
+      for (let i = 0; i < buffer.length; i += 1) {
+        buffer[i] = stream[cursor] ?? 255;
+        cursor += 1;
+      }
+    };
+
+    const result = new RandomDiceRoller(source).roll(3);
+    expect(result.dice).toEqual([1, 6, 6]);
+    expect(result.total).toBe(13);
+    expect(cursor).toBeGreaterThanOrEqual(stream.length);
+  });
+
+  it('DICE-11: RandomDiceRoller.roll() rejects zero, negative, decimal, NaN, and infinite counts', () => {
+    let sourceCalls = 0;
+    const roller = new RandomDiceRoller(() => {
+      sourceCalls += 1;
+    });
+
+    expect(() => roller.roll(0)).toThrow(RangeError);
+    expect(() => roller.roll(-1)).toThrow(RangeError);
+    expect(() => roller.roll(2.2)).toThrow(RangeError);
+    expect(() => roller.roll(Number.NaN)).toThrow(RangeError);
+    expect(() => roller.roll(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(sourceCalls).toBe(0);
   });
 });
