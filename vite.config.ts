@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     include: ['src/**/*.test.ts'],
+    poolOptions: { forks: { execArgv: ['--localstorage-file=node_modules/.vitest-localstorage'] } },
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

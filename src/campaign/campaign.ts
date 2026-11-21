@@ -1,6 +1,7 @@
 import type { CheckResult, TiesMode } from '../checks';
 import { Character } from '../character';
 import { CampaignCharacterScope } from './scopes';
+import { deserializeCampaign, exportCampaignJson } from './serialize';
 
 export interface CampaignRulesConfig {
   readonly tiesMode: TiesMode;
@@ -29,7 +30,7 @@ export interface CampaignRollLogEntry {
   readonly defenderXpEarned?: number;
 }
 
-function requireNonBlank(value: string, label: string): string {
+export function requireNonBlank(value: string, label: string): string {
   const trimmed = value.trim();
   if (trimmed.length === 0) throw new Error(`${label} cannot be blank`);
   return trimmed;
@@ -63,6 +64,13 @@ export class Campaign {
     const now = new Date().toISOString();
     const rules = { ...BASIC_CAMPAIGN_RULES, ...options?.rules };
     return new Campaign(id, requireNonBlank(name, 'Campaign name'), normalizeDescription(options?.description), now, now, rules, [], []);
+  }
+
+  static fromJson(campaignJson: string): Campaign { return deserializeCampaign(campaignJson); }
+
+  /** @internal */
+  static rehydrate(id: string, name: string, description: string | undefined, createdAt: string, updatedAt: string, rules: CampaignRulesConfig, characters: readonly Character[], rollLog: readonly CampaignRollLogEntry[]): Campaign {
+    return new Campaign(id, name, description, createdAt, updatedAt, rules, characters, rollLog);
   }
 
   rename(name: string): Campaign {
@@ -105,6 +113,13 @@ export class Campaign {
 
   character(idOrName: string): CampaignCharacterScope<{ readonly campaign: Campaign }> {
     return new CampaignCharacterScope(this, this.requireCharacter(idOrName), (campaign) => Object.freeze({ campaign }));
+  }
+
+  exportJson(): string { return exportCampaignJson(this); }
+
+  /** @internal */
+  withFreshId(): Campaign {
+    return new Campaign(globalThis.crypto.randomUUID(), this.name, this.description, this.createdAt, this.updatedAt, this.rules, this.characters, this.rollLog);
   }
 
   /** @internal */

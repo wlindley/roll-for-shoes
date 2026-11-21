@@ -1,6 +1,8 @@
 import type { Character } from '../character';
 import { Campaign, type CampaignRulesConfig } from './campaign';
 import { CampaignCharacterScope } from './scopes';
+import { deserializeWorkspace, serializeWorkspace } from './serialize';
+import type { StorageAdapter } from './storage';
 
 export class WorkspaceCampaignScope {
   constructor(private readonly workspace: Workspace, readonly campaign: Campaign) {
@@ -35,9 +37,25 @@ export class Workspace {
     return new Workspace(null, []);
   }
 
+  static deserialize(serialized: string): Workspace { return deserializeWorkspace(serialized); }
+  static async load(adapter: StorageAdapter): Promise<Workspace> {
+    const raw = await adapter.load();
+    return raw === null ? Workspace.empty() : Workspace.deserialize(raw);
+  }
+  /** @internal */
+  static rehydrate(activeCampaignId: string | null, campaigns: readonly Campaign[]): Workspace {
+    return new Workspace(activeCampaignId, campaigns);
+  }
+
   createCampaign(name: string, options?: { readonly description?: string; readonly rules?: Partial<CampaignRulesConfig> }): Workspace {
     const created = Campaign.create(name, options);
     return new Workspace(created.id, [...this.campaigns, created]);
+  }
+
+  importCampaign(campaignJson: string): Workspace {
+    const parsed = Campaign.fromJson(campaignJson);
+    const campaign = this.campaigns.some((c) => c.id === parsed.id) ? parsed.withFreshId() : parsed;
+    return new Workspace(campaign.id, [...this.campaigns, campaign]);
   }
 
   selectCampaign(idOrName: string): Workspace {
@@ -72,6 +90,9 @@ export class Workspace {
   campaign(idOrName: string): WorkspaceCampaignScope {
     return new WorkspaceCampaignScope(this, this.requireCampaign(idOrName));
   }
+
+  serialize(): string { return serializeWorkspace(this); }
+  async save(adapter: StorageAdapter): Promise<void> { await adapter.save(this.serialize()); }
 
   private requireCampaign(idOrName: string): Campaign {
     const normalized = idOrName.trim().toLowerCase();

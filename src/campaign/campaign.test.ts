@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller } from '../dice';
-import { RolledOpposition, StaticOpposition } from '../checks';
+import { CheckResult, RolledOpposition, RolledPool, StaticOpposition } from '../checks';
 import { AdvancementOutcome, Character, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome } from '../character';
-import { BASIC_CAMPAIGN_RULES, Campaign, CampaignCharacterScope, type CampaignRollLogEntry, type CampaignRulesConfig, ScopedAdvancementBuilder, ScopedCheckBuilder, Workspace, WorkspaceCampaignScope } from './index';
+import { BASIC_CAMPAIGN_RULES, Campaign, CampaignCharacterScope, type CampaignRollLogEntry, type CampaignRulesConfig, LocalStorageAdapter, MemoryStorageAdapter, ScopedAdvancementBuilder, ScopedCheckBuilder, type StorageAdapter, Workspace, WorkspaceCampaignScope } from './index';
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
@@ -194,5 +194,54 @@ describe('campaign module — Workspace & WorkspaceCampaignScope', () => {
     expect(zoeRes.workspace).not.toBe(advRes.workspace);
     expect([w7.activeCampaign.campaign.findCharacter('Alice')?.xp, checkRes.campaign, checkRes.outcome instanceof CharacterCheckOutcome, checkRes.campaign.findCharacter('Alice')?.xp, checkRes.campaign.rollLog.length, checkRes.workspace.campaign('Star Trek').campaign, advRes.campaign, advRes.advancement instanceof AdvancementOutcome, advRes.campaign.findCharacter('Alice')?.xp, advRes.campaign.findCharacter('Alice')?.skill('Sneaking').level, advRes.workspace.campaign('Star Trek').campaign, zoeRes.workspace.activeCampaignId, zoeRes.campaign, zoeRes.outcome.checkResult.outcome, zoeRes.workspace.activeCampaign.campaign])
       .toEqual([0, checkRes.workspace.activeCampaign.campaign, true, 1, 1, starTrek, advRes.workspace.activeCampaign.campaign, true, 0, 2, starTrek, advRes.workspace.activeCampaignId, zoeRes.workspace.campaign('Star Trek').campaign, 'success', advRes.workspace.activeCampaign.campaign]);
+  });
+});
+
+describe('campaign module — persistence, StorageAdapter & JSON import/export', () => {
+  const seedWorkspace = (): Workspace => {
+    const ws = Workspace.empty().createCampaign('Heist', { description: 'Vault job', rules: { tiesMode: 'twist', statusesEnabled: true } }).createCampaign('Sci-Fi').selectCampaign('Heist').activeCampaign.addCharacter('Alice').activeCampaign.addCharacter('Bob');
+    const r1 = ws.activeCampaign.character('Alice').makeCheck('Do Anything').withAction('Crack safe').againstCharacter('Bob', 'Do Anything').roll(new StubDiceRoller([6, 3])).workspace.activeCampaign.character('Alice').advance('Lockpicking').claim().workspace;
+    return r1.activeCampaign.character('Bob').makeCheck('Do Anything').withAction('Pry bar').against(new StaticOpposition(5, 'Door')).roll(new StubDiceRoller([2])).workspace;
+  };
+  it('CMP-BASIC-08: saves, loads, and clears multi-campaign Workspace via MemoryStorageAdapter preserving domain instances', async () => {
+    const [ws, mem] = [seedWorkspace(), new MemoryStorageAdapter() satisfies StorageAdapter];
+    expect([await mem.load(), (await Workspace.load(mem)).campaigns]).toEqual([null, []]);
+    await ws.save(mem);
+    const restored = await Workspace.load(new MemoryStorageAdapter(await mem.load()));
+    expect(restored).not.toBe(ws);
+    const [origHeist, restHeist] = [ws.activeCampaign.campaign, restored.activeCampaign.campaign];
+    const [e0, e1, claimed, emptyRound] = [restHeist.rollLog[0]!, restHeist.rollLog[1]!, restored.activeCampaign.character('Bob').advance('Bashing').claim(), Workspace.deserialize(Workspace.empty().serialize())];
+    expect(claimed.workspace).not.toBe(restored);
+    await mem.clear();
+    expect([restored instanceof Workspace, restHeist instanceof Campaign, restored.activeCampaignId, restored.campaigns.length, restHeist.description, restHeist.rules, restHeist.findCharacter('Alice') instanceof Character, restHeist.findCharacter('Alice')?.skill('Lockpicking').level, restHeist.findCharacter('Bob')?.xp, restHeist.findCharacter('Bob')?.pendingAdvancement?.xpCostToAdvance, e0.kind, e0.checkResult instanceof CheckResult, e0.checkResult.actor instanceof RolledPool, e0.checkResult.outcome, e0.checkResult.margin, e0.checkResult.opposition.label, e1.kind, e1.checkResult.opposition.pool instanceof RolledPool, e1.checkResult.opposition.pool?.rawTotal, e1.defenderName, e1.defenderXpEarned, claimed.advancement.createdSkill.level, claimed.campaign.findCharacter('Bob')?.xp, emptyRound.activeCampaignId, emptyRound.campaigns, await mem.load(), (await Workspace.load(mem)).campaigns])
+      .toEqual([true, true, origHeist.id, 2, 'Vault job', origHeist.rules, true, 2, 2, 1, 'vs_opposition', true, true, 'failure', -3, 'Door', 'character_opposed', true, 3, 'Bob', 1, 2, 1, null, [], null, []]);
+  });
+  it('CMP-BASIC-09: persists and clears Workspace via LocalStorageAdapter with default localStorage and custom key/Storage', async () => {
+    const [ws, local, custom] = [seedWorkspace(), new LocalStorageAdapter(), new LocalStorageAdapter({ key: 'custom.rfs.v1', storage: globalThis.sessionStorage })];
+    await Promise.all([local.clear(), custom.clear()]);
+    expect((await Workspace.load(local)).campaigns).toEqual([]);
+    await Promise.all([ws.save(local), ws.save(custom)]);
+    const [loaded, loadedCustom] = [await Workspace.load(new LocalStorageAdapter()), await Workspace.load(new LocalStorageAdapter({ key: 'custom.rfs.v1', storage: globalThis.sessionStorage }))];
+    expect(loaded).not.toBe(ws);
+    expect([globalThis.localStorage.getItem('roll_for_shoes.workspace.v1'), globalThis.sessionStorage.getItem('custom.rfs.v1'), loaded.activeCampaignId, loaded.activeCampaign.campaign.findCharacter('Bob')?.xp, loadedCustom.activeCampaign.campaign.name, loadedCustom.campaigns.length])
+      .toEqual([ws.serialize(), ws.serialize(), ws.activeCampaignId, 2, 'Heist', 2]);
+    await Promise.all([local.clear(), custom.clear()]);
+    expect([globalThis.localStorage.getItem('roll_for_shoes.workspace.v1'), globalThis.sessionStorage.getItem('custom.rfs.v1'), (await Workspace.load(local)).campaigns, await custom.load()]).toEqual([null, null, [], null]);
+  });
+  it('CMP-BASIC-10: exports/imports Campaign JSON with duplicate-ID collision remapping and rejects invalid payloads', () => {
+    const [ws, empty] = [seedWorkspace(), Workspace.empty()];
+    const heist = ws.activeCampaign.campaign;
+    const json = heist.exportJson();
+    const [parsed, imp1] = [Campaign.fromJson(json), empty.importCampaign(json)];
+    const imp2 = imp1.importCampaign(json);
+    for (const [prev, next] of [[heist, parsed], [empty, imp1], [imp1, imp2]] as const) expect(next).not.toBe(prev);
+    const [c0, c1] = [imp2.campaigns[0]!, imp2.campaigns[1]!];
+    expect([parsed instanceof Campaign, parsed.id, parsed.description, parsed.rules, parsed.rollLog[0]?.checkResult instanceof CheckResult, empty.campaigns, imp1.campaigns.length, imp1.activeCampaignId, imp2.campaigns.length, c0.id, c1.id !== heist.id, imp2.activeCampaignId, c1.name, c1.characters.length, c1.rollLog.length])
+      .toEqual([true, heist.id, 'Vault job', heist.rules, true, [], 1, heist.id, 2, heist.id, true, c1.id, 'Heist', 2, 2]);
+    const [wsObj, cmpObj] = [JSON.parse(ws.serialize()) as Record<string, unknown>, JSON.parse(json) as Record<string, unknown>];
+    for (const raw of ['{bad', 'null', '[]', '42', '{"schemaVersion":99}', JSON.stringify({ ...wsObj, activeCampaignId: 'dangling' }), JSON.stringify({ ...wsObj, activeCampaignId: 123 }), JSON.stringify({ ...wsObj, campaigns: 'bad' }), JSON.stringify({ ...wsObj, campaigns: [null] })]) expect(() => Workspace.deserialize(raw)).toThrow();
+    for (const raw of ['{bad', 'null', '[]', '{"schemaVersion":99}', JSON.stringify({ ...cmpObj, id: '  ' }), JSON.stringify({ ...cmpObj, name: '' }), JSON.stringify({ ...cmpObj, rules: { ...(cmpObj.rules as object), tiesMode: 'bogus' } }), JSON.stringify({ ...cmpObj, characters: 'bad' }), JSON.stringify({ ...cmpObj, rollLog: [{ kind: 'bogus' }] })]) {
+      for (const fn of [() => Campaign.fromJson(raw), () => empty.importCampaign(raw)]) expect(fn).toThrow();
+    }
   });
 });
