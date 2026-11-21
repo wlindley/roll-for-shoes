@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { StubDiceRoller } from '../dice';
 import { RolledOpposition, StaticOpposition } from '../checks';
 import { AdvancementOutcome, Character, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome } from '../character';
-import { BASIC_CAMPAIGN_RULES, Campaign, CampaignCharacterScope, type CampaignRollLogEntry, type CampaignRulesConfig, ScopedAdvancementBuilder, ScopedCheckBuilder } from './index';
+import { BASIC_CAMPAIGN_RULES, Campaign, CampaignCharacterScope, type CampaignRollLogEntry, type CampaignRulesConfig, ScopedAdvancementBuilder, ScopedCheckBuilder, Workspace, WorkspaceCampaignScope } from './index';
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
@@ -136,5 +136,63 @@ describe('campaign module — Campaign.character() fluent scopes & rollLog', () 
     expect(updated.campaign).not.toBe(claimed.campaign);
     expect([rolled.findCharacter('Alice')?.pendingAdvancement !== null, dismissed.campaign.findCharacter('Alice')?.pendingAdvancement, dismissed.campaign.findCharacter('Alice')?.skills.length, dismissed.campaign.findCharacter('Bob'), claimed.campaign.findCharacter('Alice')?.skills.length, updated.campaign.findCharacter('Alice')?.skill('Parkour').level, updated.campaign.findCharacter('Bob')])
       .toEqual([true, null, 1, bob, 2, 3, bob]);
+  });
+});
+
+describe('campaign module — Workspace & WorkspaceCampaignScope', () => {
+  it('CMP-BASIC-06: manages immutable Workspace campaigns, active selection, replacement, and deletion fallback', () => {
+    const empty = Workspace.empty();
+    expect(() => empty.activeCampaign).toThrow();
+    const ws1 = empty.createCampaign('Heist');
+    const heist = ws1.campaigns[0]!;
+    expect([empty instanceof Workspace, empty.schemaVersion, empty.activeCampaignId, empty.campaigns, Object.isFrozen(empty), Object.isFrozen(empty.campaigns), empty.tryGetActiveCampaign(), Object.isFrozen(ws1.campaigns), heist.name, heist.description, heist.rules, ws1.activeCampaignId, ws1.tryGetActiveCampaign(), ws1.activeCampaign instanceof WorkspaceCampaignScope, ws1.activeCampaign.campaign])
+      .toEqual([true, 1, null, [], true, true, null, true, 'Heist', undefined, BASIC_CAMPAIGN_RULES, heist.id, heist, true, heist]);
+    const ws2 = ws1.createCampaign('Sci-Fi', { description: 'Space opera', rules: { tiesMode: 'twist' } });
+    const scifi = ws2.campaigns[1]!;
+    const sel1 = ws2.selectCampaign('  heist  ');
+    const sel2 = sel1.selectCampaign(scifi.id);
+    const heistRenamed = heist.rename('Grand Heist');
+    const rep = sel2.replaceCampaign(heistRenamed);
+    const ws3 = ws2.createCampaign('Fantasy');
+    const fantasy = ws3.campaigns[2]!;
+    const delNonActive = ws3.deleteCampaign('  sci-fi  ');
+    const delActive = delNonActive.deleteCampaign(fantasy.id);
+    const delLast = delActive.deleteCampaign('Heist');
+    for (const [prev, next] of [[empty, ws1], [ws1, ws2], [ws2, sel1], [sel1, sel2], [sel2, rep], [ws2, ws3], [ws3, delNonActive], [delNonActive, delActive], [delActive, delLast]] as const) expect(next).not.toBe(prev);
+    expect([ws1.campaigns, ws1.activeCampaignId, ws2.campaigns, scifi.description, scifi.rules.tiesMode, ws2.activeCampaignId, sel1.activeCampaignId, sel1.tryGetActiveCampaign(), sel2.activeCampaignId, sel2.campaigns, rep.campaigns, rep.activeCampaignId])
+      .toEqual([[heist], heist.id, [heist, scifi], 'Space opera', 'twist', scifi.id, heist.id, heist, scifi.id, [heist, scifi], [heistRenamed, scifi], scifi.id]);
+    expect([ws3.campaigns.length, delNonActive.campaigns, delNonActive.activeCampaignId, delActive.campaigns, delActive.activeCampaignId, delLast.campaigns, delLast.activeCampaignId, delLast.tryGetActiveCampaign()])
+      .toEqual([3, [heist, fantasy], fantasy.id, [heist], heist.id, [], null, null]);
+    expect(() => delLast.activeCampaign).toThrow();
+    expect(() => empty.createCampaign('   ')).toThrow();
+    expect(() => rep.replaceCampaign(Campaign.create('Ghost', { id: 'cmp-missing' }))).toThrow();
+    for (const bad of ['Unknown', '   ']) {
+      for (const fn of [() => ws2.selectCampaign(bad), () => ws2.deleteCampaign(bad), () => ws2.campaign(bad)]) expect(fn).toThrow();
+    }
+  });
+
+  it('CMP-BASIC-07: traverses WorkspaceCampaignScope and activeCampaign.character() checks & advancement with campaign isolation', () => {
+    const base = Workspace.empty().createCampaign('Heist').createCampaign('Sci-Fi').selectCampaign('Heist');
+    const origScifi = base.campaign('Sci-Fi').campaign;
+    const w1 = base.activeCampaign.withDescription('Vault job');
+    const w2 = w1.activeCampaign.withRules({ statusesEnabled: true });
+    const w3 = w2.activeCampaign.addCharacter('Alice');
+    const w4 = w3.activeCampaign.addCharacter(Character.create('Temp'));
+    const w5 = w4.activeCampaign.removeCharacter('Temp');
+    const w6 = w5.campaign('  sci-fi  ').addCharacter('Zoe');
+    const w7 = w6.campaign('Sci-Fi').rename('Star Trek');
+    const wRenamed = w7.activeCampaign.rename('Ocean Eleven');
+    for (const [prev, next] of [[base, w1], [w1, w2], [w2, w3], [w3, w4], [w4, w5], [w5, w6], [w6, w7], [w7, wRenamed]] as const) expect(next).not.toBe(prev);
+    const starTrek = w7.campaign('Star Trek').campaign;
+    expect([base.activeCampaign.campaign.characters, w5.activeCampaign.campaign.description, w5.activeCampaign.campaign.rules.statusesEnabled, w5.activeCampaign.campaign.characters.map((c) => c.name), w5.campaign('Sci-Fi').campaign, w7.activeCampaign.campaign.name, wRenamed.activeCampaign.campaign.name, wRenamed.activeCampaignId, starTrek.findCharacter('Zoe')?.name])
+      .toEqual([[], 'Vault job', true, ['Alice'], origScifi, 'Heist', 'Ocean Eleven', w7.activeCampaignId, 'Zoe']);
+    const checkRes = w7.activeCampaign.character('Alice').makeCheck('Do Anything').withAction('Sneak past guard').against(new StaticOpposition(6)).roll(new StubDiceRoller([2]));
+    expect(checkRes.workspace).not.toBe(w7);
+    const advRes = checkRes.workspace.activeCampaign.character('Alice').advance('Sneaking').claim();
+    expect(advRes.workspace).not.toBe(checkRes.workspace);
+    const zoeRes = advRes.workspace.campaign('Star Trek').character('Zoe').makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([5]));
+    expect(zoeRes.workspace).not.toBe(advRes.workspace);
+    expect([w7.activeCampaign.campaign.findCharacter('Alice')?.xp, checkRes.campaign, checkRes.outcome instanceof CharacterCheckOutcome, checkRes.campaign.findCharacter('Alice')?.xp, checkRes.campaign.rollLog.length, checkRes.workspace.campaign('Star Trek').campaign, advRes.campaign, advRes.advancement instanceof AdvancementOutcome, advRes.campaign.findCharacter('Alice')?.xp, advRes.campaign.findCharacter('Alice')?.skill('Sneaking').level, advRes.workspace.campaign('Star Trek').campaign, zoeRes.workspace.activeCampaignId, zoeRes.campaign, zoeRes.outcome.checkResult.outcome, zoeRes.workspace.activeCampaign.campaign])
+      .toEqual([0, checkRes.workspace.activeCampaign.campaign, true, 1, 1, starTrek, advRes.workspace.activeCampaign.campaign, true, 0, 2, starTrek, advRes.workspace.activeCampaignId, zoeRes.workspace.campaign('Star Trek').campaign, 'success', advRes.workspace.activeCampaign.campaign]);
   });
 });
