@@ -1,0 +1,110 @@
+import type { CheckResult, TiesMode } from '../checks';
+import { Character } from '../character';
+
+export interface CampaignRulesConfig {
+  readonly tiesMode: TiesMode;
+  readonly statusesEnabled: boolean;
+  readonly allowCustomStartingSkills: boolean;
+  readonly skillSlots: null;
+}
+
+export const BASIC_CAMPAIGN_RULES: CampaignRulesConfig = Object.freeze({
+  tiesMode: 'fail', statusesEnabled: false, allowCustomStartingSkills: false, skillSlots: null,
+});
+
+export interface CampaignRollLogEntry {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly kind: 'vs_opposition' | 'character_opposed';
+  readonly actorId: string;
+  readonly actorName: string;
+  readonly actorSkillName: string;
+  readonly defenderId?: string;
+  readonly defenderName?: string;
+  readonly defenderSkillName?: string;
+  readonly actionDescription?: string;
+  readonly checkResult: CheckResult;
+  readonly actorXpEarned: number;
+  readonly defenderXpEarned?: number;
+}
+
+function requireNonBlank(value: string, label: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) throw new Error(`${label} cannot be blank`);
+  return trimmed;
+}
+
+const normalizeDescription = (value?: string): string | undefined => value?.trim() || undefined;
+
+export class Campaign {
+  readonly description?: string;
+  readonly rules: CampaignRulesConfig;
+  readonly characters: readonly Character[];
+  readonly rollLog: readonly CampaignRollLogEntry[];
+
+  private constructor(
+    readonly id: string, readonly name: string, description: string | undefined,
+    readonly createdAt: string, readonly updatedAt: string,
+    rules: CampaignRulesConfig, characters: readonly Character[], rollLog: readonly CampaignRollLogEntry[],
+  ) {
+    this.description = description;
+    this.rules = Object.freeze({ ...rules });
+    this.characters = Object.freeze([...characters]);
+    this.rollLog = Object.freeze([...rollLog]);
+    Object.freeze(this);
+  }
+
+  static create(
+    name: string,
+    options?: { readonly id?: string; readonly description?: string; readonly rules?: Partial<CampaignRulesConfig> },
+  ): Campaign {
+    const id = options?.id !== undefined ? requireNonBlank(options.id, 'Campaign ID') : globalThis.crypto.randomUUID();
+    const now = new Date().toISOString();
+    const rules = { ...BASIC_CAMPAIGN_RULES, ...options?.rules };
+    return new Campaign(id, requireNonBlank(name, 'Campaign name'), normalizeDescription(options?.description), now, now, rules, [], []);
+  }
+
+  rename(name: string): Campaign {
+    return this.copy({ name: requireNonBlank(name, 'Campaign name') });
+  }
+
+  withDescription(description: string): Campaign {
+    return this.copy({ description: normalizeDescription(description) });
+  }
+
+  withRules(rulesPatch: Partial<CampaignRulesConfig>): Campaign {
+    return this.copy({ rules: { ...this.rules, ...rulesPatch } });
+  }
+
+  addCharacter(characterOrName: Character | string): Campaign {
+    const candidate = typeof characterOrName === 'string' ? Character.create(characterOrName) : characterOrName;
+    if (this.characters.some((c) => c.id === candidate.id || c.name.toLowerCase() === candidate.name.toLowerCase())) {
+      throw new Error(`Duplicate character in campaign: ${candidate.name}`);
+    }
+    return this.copy({ characters: [...this.characters, candidate] });
+  }
+
+  removeCharacter(idOrName: string): Campaign {
+    const target = this.findCharacter(idOrName);
+    if (!target) throw new Error(`Character not found: ${idOrName}`);
+    return this.copy({ characters: this.characters.filter((c) => c.id !== target.id) });
+  }
+
+  replaceCharacter(character: Character): Campaign {
+    const index = this.characters.findIndex((c) => c.id === character.id);
+    if (index === -1) throw new Error(`Character not found: ${character.id}`);
+    const next = [...this.characters];
+    next[index] = character;
+    return this.copy({ characters: next });
+  }
+
+  findCharacter(idOrName: string): Character | undefined {
+    const normalized = idOrName.trim().toLowerCase();
+    return this.characters.find((c) => c.id === idOrName || c.name.toLowerCase() === normalized);
+  }
+
+  private copy(patch: { readonly name?: string; readonly description?: string; readonly rules?: CampaignRulesConfig; readonly characters?: readonly Character[] }): Campaign {
+    const desc = 'description' in patch ? patch.description : this.description;
+    return new Campaign(this.id, patch.name ?? this.name, desc, this.createdAt, new Date().toISOString(), patch.rules ?? this.rules, patch.characters ?? this.characters, this.rollLog);
+  }
+}
