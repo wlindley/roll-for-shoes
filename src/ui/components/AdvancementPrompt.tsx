@@ -13,15 +13,31 @@ export interface AdvancementPromptProps {
 
 export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Element {
   const { workspace, character, pending, onChange } = props;
+  const slotConfig = workspace.activeCampaign.campaign.rules.skillSlots;
+  const slotSummary = character.getSkillSlotSummary(pending.targetLevel, slotConfig);
+  const slotsFull = slotSummary.availableSlots === 0;
+  const replaceableSkills = character.skills.filter((s) => s.level === pending.targetLevel);
+  const canReplace = replaceableSkills.length > 0;
+  const canPurchaseSlot = Boolean(slotConfig?.allowSlotPurchase);
+
   const [newSkillName, setNewSkillName] = useState('');
+  const [slotAction, setSlotAction] = useState<'replace' | 'buy'>('replace');
+  const [replaceSkillId, setReplaceSkillId] = useState('');
   const [promptError, setPromptError] = useState<string | null>(null);
-  const inputId = useId();
+  const baseId = useId();
+
+  const effectiveAction = !canReplace ? (canPurchaseSlot ? 'buy' : 'none') : !canPurchaseSlot ? 'replace' : slotAction;
+  const selectedReplaceId = replaceableSkills.find((s) => s.id === replaceSkillId)?.id ?? replaceableSkills[0]?.id ?? '';
 
   const handleClaim = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = workspace.activeCampaign.character(character.id).advance(newSkillName).claim();
-      onChange(res.workspace);
+      let builder = workspace.activeCampaign.character(character.id).advance(newSkillName);
+      if (slotsFull) {
+        if (effectiveAction === 'replace' && selectedReplaceId) builder = builder.replacingSkill(selectedReplaceId);
+        else if (effectiveAction === 'buy') builder = builder.purchasingSlot();
+      }
+      onChange(builder.claim().workspace);
     } catch (err: unknown) {
       setPromptError(err instanceof Error ? err.message : 'Unable to claim advancement.');
     }
@@ -54,11 +70,47 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
         </span>
       </div>
       {promptError && <div className="error-banner" role="alert">{promptError}</div>}
-      <form className="row" onSubmit={handleClaim}>
-        <label htmlFor={inputId}>New Level {pending.targetLevel} skill</label>
-        <input id={inputId} type="text" value={newSkillName} onChange={(e) => setNewSkillName(e.target.value)} placeholder={`Specific ${pending.usedSkillName} specialty`} required />
-        <button type="submit" className="btn btn-primary">Claim Level {pending.targetLevel} Skill</button>
-        <button type="button" className="btn" onClick={handleDismiss}>Dismiss</button>
+      <form className="stack" onSubmit={handleClaim}>
+        {slotsFull && (
+          <fieldset className="stack">
+            <legend>Level {pending.targetLevel} Skill Slots Full ({slotSummary.usedSlots}/{slotSummary.maxSlots} slots used)</legend>
+            {canReplace && canPurchaseSlot && (
+              <div className="row">
+                <label className="row">
+                  <input type="radio" name={`${baseId}-mode`} checked={effectiveAction === 'replace'} onChange={() => setSlotAction('replace')} />
+                  Replace existing skill
+                </label>
+                <label className="row">
+                  <input type="radio" name={`${baseId}-mode`} checked={effectiveAction === 'buy'} onChange={() => setSlotAction('buy')} />
+                  Buy Slot +{slotSummary.nextSlotXpCost} XP
+                </label>
+              </div>
+            )}
+            {effectiveAction === 'replace' && (
+              <div className="row">
+                <label htmlFor={`${baseId}-replace`}>Replace Level {pending.targetLevel} skill</label>
+                <select id={`${baseId}-replace`} value={selectedReplaceId} onChange={(e) => setReplaceSkillId(e.target.value)}>
+                  {replaceableSkills.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.level}d6)</option>)}
+                </select>
+              </div>
+            )}
+            {!canReplace && (
+              <p className="muted">
+                {canPurchaseSlot
+                  ? `No existing Level ${pending.targetLevel} skill to replace — claiming will Buy Slot +${slotSummary.nextSlotXpCost} XP.`
+                  : `No available slots or replaceable skills at Level ${pending.targetLevel}.`}
+              </p>
+            )}
+          </fieldset>
+        )}
+        <div className="row">
+          <label htmlFor={`${baseId}-skill`}>New Level {pending.targetLevel} skill</label>
+          <input id={`${baseId}-skill`} type="text" value={newSkillName} onChange={(e) => setNewSkillName(e.target.value)} placeholder={`Specific ${pending.usedSkillName} specialty`} required />
+          <button type="submit" className="btn btn-primary">
+            {slotsFull && effectiveAction === 'buy' ? `Buy Slot (+${slotSummary.nextSlotXpCost} XP) & Claim` : `Claim Level ${pending.targetLevel} Skill`}
+          </button>
+          <button type="button" className="btn" onClick={handleDismiss}>Dismiss</button>
+        </div>
       </form>
     </section>
   );

@@ -83,6 +83,7 @@ export function App(props: AppProps): React.JSX.Element {
                   </span>
                   {activeCampaign.rules.statusesEnabled && <span className="badge">Statuses: On</span>}
                   {activeCampaign.rules.allowCustomStartingSkills && <span className="badge">Starting Skills: Custom</span>}
+                  {activeCampaign.rules.skillSlots && <span className="badge">Skill Slots{activeCampaign.rules.skillSlots.allowSlotPurchase ? ' (+XP)' : ''}: On</span>}
                 </div>
                 <button type="button" className="btn" onClick={() => setRulesOpen(true)}>Campaign Rules</button>
               </div>

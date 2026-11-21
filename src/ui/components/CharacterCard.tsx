@@ -2,6 +2,7 @@ import type React from 'react';
 import type { Workspace } from '../../campaign';
 import type { Character } from '../../character';
 import type { DiceRoller } from '../../dice';
+import { SkillSlotBar } from './SkillSlotBar';
 import { StatusManager } from './StatusManager';
 
 export interface CharacterCardProps {
@@ -18,6 +19,7 @@ export interface CharacterCardProps {
 export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
   const { workspace, character, diceRoller, isSelected, onSelectForCheck, onRemove, onChange, onError } = props;
   const pending = character.pendingAdvancement;
+  const slotConfig = workspace.activeCampaign.campaign.rules.skillSlots;
 
   return (
     <article className="card stack" aria-label={`Character ${character.name}`}>
@@ -27,6 +29,7 @@ export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
       </div>
       {pending && <div><span className="badge badge-ready">Level {pending.targetLevel} skill ready</span></div>}
       <StatusManager workspace={workspace} character={character} diceRoller={diceRoller} onChange={onChange} onError={onError} />
+      {slotConfig && <SkillSlotBar workspace={workspace} character={character} slotConfig={slotConfig} onChange={onChange} onError={onError} />}
       <ul className="skill-list">
         {character.skills.map((skill) => {
           const parent = skill.parentSkillId ? character.skills.find((s) => s.id === skill.parentSkillId) : undefined;

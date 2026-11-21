@@ -1,7 +1,10 @@
 import type React from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Workspace } from '../../campaign';
+import { SkillSlotConfig } from '../../character';
 import type { TiesMode } from '../../checks';
+
+type SlotMode = 'unlimited' | 'triangle';
 
 export interface CampaignSettingsDialogProps {
   readonly workspace: Workspace;
@@ -17,6 +20,8 @@ export function CampaignSettingsDialog(props: CampaignSettingsDialogProps): Reac
   const [tiesMode, setTiesMode] = useState<TiesMode>(rules.tiesMode);
   const [statusesEnabled, setStatusesEnabled] = useState(rules.statusesEnabled);
   const [allowCustomStartingSkills, setAllowCustomStartingSkills] = useState(rules.allowCustomStartingSkills);
+  const [slotMode, setSlotMode] = useState<SlotMode>(rules.skillSlots ? 'triangle' : 'unlimited');
+  const [allowSlotPurchase, setAllowSlotPurchase] = useState(rules.skillSlots?.allowSlotPurchase ?? false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const baseId = useId();
 
@@ -27,17 +32,20 @@ export function CampaignSettingsDialog(props: CampaignSettingsDialogProps): Reac
       setTiesMode(rules.tiesMode);
       setStatusesEnabled(rules.statusesEnabled);
       setAllowCustomStartingSkills(rules.allowCustomStartingSkills);
+      setSlotMode(rules.skillSlots ? 'triangle' : 'unlimited');
+      setAllowSlotPurchase(rules.skillSlots?.allowSlotPurchase ?? false);
       setDialogError(null);
       dialog.showModal();
     } else if (!open && dialog.open) {
       dialog.close();
     }
-  }, [open, rules.tiesMode, rules.statusesEnabled, rules.allowCustomStartingSkills]);
+  }, [open, rules.tiesMode, rules.statusesEnabled, rules.allowCustomStartingSkills, rules.skillSlots]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      onChange(workspace.activeCampaign.withRules({ tiesMode, statusesEnabled, allowCustomStartingSkills }));
+      const skillSlots = slotMode === 'triangle' ? SkillSlotConfig.triangle({ allowSlotPurchase }) : null;
+      onChange(workspace.activeCampaign.withRules({ tiesMode, statusesEnabled, allowCustomStartingSkills, skillSlots }));
       onClose();
     } catch (err: unknown) {
       setDialogError(err instanceof Error ? err.message : 'Unable to update campaign rules.');
@@ -54,6 +62,17 @@ export function CampaignSettingsDialog(props: CampaignSettingsDialogProps): Reac
           <option value="fail">Basic Rules — Ties Fail (+1 XP)</option>
           <option value="twist">Advanced Rules — Partial Success with Twist (0 XP)</option>
         </select>
+        <label htmlFor={`${baseId}-slots`}>Skill slots</label>
+        <select id={`${baseId}-slots`} value={slotMode} onChange={(e) => setSlotMode(e.target.value as SlotMode)}>
+          <option value="unlimited">Unlimited</option>
+          <option value="triangle">Skill Triangle (4 / 3 / 2)</option>
+        </select>
+        {slotMode === 'triangle' && (
+          <label className="row">
+            <input type="checkbox" checked={allowSlotPurchase} onChange={(e) => setAllowSlotPurchase(e.target.checked)} />
+            Allow Purchasing Extra Slots with XP
+          </label>
+        )}
         <label className="row">
           <input type="checkbox" checked={statusesEnabled} onChange={(e) => setStatusesEnabled(e.target.checked)} />
           Enable Statuses (persistent bonuses &amp; penalties)
