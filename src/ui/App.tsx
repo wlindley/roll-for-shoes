@@ -81,6 +81,7 @@ export function App(props: AppProps): React.JSX.Element {
                   <span className={activeCampaign.rules.tiesMode === 'twist' ? 'badge badge-tie' : 'badge'}>
                     Ties: {activeCampaign.rules.tiesMode === 'twist' ? 'Twist' : 'Fail'}
                   </span>
+                  {activeCampaign.rules.statusesEnabled && <span className="badge">Statuses: On</span>}
                 </div>
                 <button type="button" className="btn" onClick={() => setRulesOpen(true)}>Campaign Rules</button>
               </div>
@@ -95,6 +96,7 @@ export function App(props: AppProps): React.JSX.Element {
             />
             <CharacterGrid
               workspace={workspace}
+              diceRoller={props.diceRoller}
               selectedActorId={effectiveActorId}
               onSelectActor={setSelectedActorId}
               onChange={commitWorkspace}

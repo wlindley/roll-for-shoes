@@ -1,11 +1,13 @@
 import type React from 'react';
 import { useState } from 'react';
 import type { Workspace } from '../../campaign';
+import type { DiceRoller } from '../../dice';
 import { CharacterCard } from './CharacterCard';
 import { CreateCharacterDialog } from './CreateCharacterDialog';
 
 export interface CharacterGridProps {
   readonly workspace: Workspace;
+  readonly diceRoller: DiceRoller;
   readonly selectedActorId: string | null;
   readonly onSelectActor: (characterId: string) => void;
   readonly onChange: (next: Workspace) => void;
@@ -13,7 +15,7 @@ export interface CharacterGridProps {
 }
 
 export function CharacterGrid(props: CharacterGridProps): React.JSX.Element {
-  const { workspace, selectedActorId, onSelectActor, onChange, onError } = props;
+  const { workspace, diceRoller, selectedActorId, onSelectActor, onChange, onError } = props;
   const [createOpen, setCreateOpen] = useState(false);
   const characters = workspace.activeCampaign.campaign.characters;
 
@@ -36,7 +38,7 @@ export function CharacterGrid(props: CharacterGridProps): React.JSX.Element {
       ) : (
         <div className="card-grid">
           {characters.map((c) => (
-            <CharacterCard key={c.id} character={c} isSelected={c.id === selectedActorId} onSelectForCheck={onSelectActor} onRemove={handleRemove} />
+            <CharacterCard key={c.id} workspace={workspace} character={c} diceRoller={diceRoller} isSelected={c.id === selectedActorId} onSelectForCheck={onSelectActor} onRemove={handleRemove} onChange={onChange} onError={onError} />
           ))}
         </div>
       )}

@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useId, useState } from 'react';
 import type { Workspace } from '../../campaign';
-import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome } from '../../character';
+import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome, Status } from '../../character';
 import { type CheckOutcome, DifficultyOpposition, DifficultyTier, RolledOpposition, StaticOpposition } from '../../checks';
 import type { DiceRoller, DieValue } from '../../dice';
 
@@ -55,8 +55,12 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
   const [difficultyMode, setDifficultyMode] = useState<DifficultyMode>('static');
   const [defenderId, setDefenderId] = useState('');
   const [defenderSkillId, setDefenderSkillId] = useState('');
+  const [selectedStatusIds, setSelectedStatusIds] = useState<readonly string[]>([]);
+  const [modLabel, setModLabel] = useState('');
+  const [modValue, setModValue] = useState('');
   const [latestRoll, setLatestRoll] = useState<LatestRoll | null>(null);
   const baseId = useId();
+  const toggleStatus = (id: string) => setSelectedStatusIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
   const firstCharacter = characters[0];
   if (!firstCharacter) {
@@ -81,10 +85,20 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       const trimmedAction = action.trim();
       let builder = workspace.activeCampaign.character(actor.id).makeCheck(actorSkill.id);
       if (trimmedAction) builder = builder.withAction(trimmedAction);
+      if (campaign.rules.statusesEnabled) {
+        for (const s of actor.statuses) if (selectedStatusIds.includes(s.id)) builder = builder.withStatus(s.id);
+      }
+      const modNum = Number(modValue);
+      if (modValue.trim() !== '' && Number.isInteger(modNum) && modNum !== 0) {
+        builder = builder.withModifier(modLabel.trim() || 'Situational', modNum);
+      }
 
       if (mode === 'character') {
         if (!defender || !defenderSkill) return;
-        const res = builder.againstCharacter(defender.id, defenderSkill.id).roll(diceRoller);
+        const defStatuses = campaign.rules.statusesEnabled ? defender.statuses.filter((s) => selectedStatusIds.includes(s.id)) : [];
+        const res = builder
+          .againstCharacter(defender.id, defenderSkill.id, defStatuses.length > 0 ? (b) => defStatuses.reduce((acc, s) => acc.withStatus(s.id), b) : undefined)
+          .roll(diceRoller);
         onChange(res.workspace);
         setLatestRoll({ campaignId: campaign.id, kind: 'character_opposed', outcome: res.outcome });
       } else {
@@ -99,6 +113,8 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
         setLatestRoll({ campaignId: campaign.id, kind: 'vs_opposition', outcome: res.outcome });
       }
       setAction('');
+      setModLabel('');
+      setModValue('');
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : 'Unable to resolve check.');
     }
@@ -106,6 +122,18 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
 
   const activeRoll = latestRoll?.campaignId === campaign.id ? latestRoll : null;
   const checkResult = activeRoll?.outcome.checkResult;
+  const renderStatusToggles = (label: string, statuses: readonly Status[]) =>
+    campaign.rules.statusesEnabled && statuses.length > 0 ? (
+      <div className="row" role="group" aria-label={label}>
+        <span className="muted">{label}:</span>
+        {statuses.map((s) => (
+          <label key={s.id} className="row">
+            <input type="checkbox" checked={selectedStatusIds.includes(s.id)} onChange={() => toggleStatus(s.id)} />
+            {s.rating > 0 ? `+${s.rating}` : s.rating} {s.name}
+          </label>
+        ))}
+      </div>
+    ) : null;
 
   return (
     <section className="panel stack" aria-label="Check roller">
@@ -122,6 +150,12 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
           </select>
           <label htmlFor={`${baseId}-action`}>Action</label>
           <input id={`${baseId}-action`} type="text" value={action} onChange={(e) => setAction(e.target.value)} placeholder="Say what you do…" />
+        </div>
+        {renderStatusToggles(`${actor.name} statuses`, actor.statuses)}
+        <div className="row">
+          <label htmlFor={`${baseId}-modval`}>Modifier</label>
+          <input id={`${baseId}-modval`} type="number" step={1} value={modValue} onChange={(e) => setModValue(e.target.value)} placeholder="+2 / -4" />
+          <input aria-label="Modifier label" type="text" value={modLabel} onChange={(e) => setModLabel(e.target.value)} placeholder="Modifier label (optional)" />
         </div>
         <fieldset className="stack">
           <legend>Opposition</legend>
@@ -173,6 +207,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
               </>
             ))}
           </div>
+          {mode === 'character' && defender && renderStatusToggles(`${defender.name} statuses`, defender.statuses)}
         </fieldset>
         <div><button type="submit" className="btn btn-primary" disabled={!canRoll}>Roll {actorSkill.level}d6</button></div>
       </form>

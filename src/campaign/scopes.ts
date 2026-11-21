@@ -1,6 +1,6 @@
 import type { DiceRoller } from '../dice';
 import type { CheckOpposition } from '../checks';
-import type { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterCheckBuilder, CharacterCheckOutcome, OpposedCharacterCheckOutcome } from '../character';
+import type { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterCheckBuilder, CharacterCheckOutcome, OpposedCharacterCheckOutcome, OpposedParticipantBuilder } from '../character';
 import type { Campaign } from './campaign';
 
 export class CampaignCharacterScope<TRoot> {
@@ -36,6 +36,15 @@ export class ScopedCheckBuilder<TRoot> {
     return new ScopedCheckBuilder(this.campaign, this.actorId, this.wrap, this.checkBuilder.withAction(description), description);
   }
 
+  withStatus(statusIdOrName: string): ScopedCheckBuilder<TRoot> {
+    this.requireStatusesEnabled();
+    return new ScopedCheckBuilder(this.campaign, this.actorId, this.wrap, this.checkBuilder.withStatus(statusIdOrName), this.actionDescription);
+  }
+
+  withModifier(label: string, value: number): ScopedCheckBuilder<TRoot> {
+    return new ScopedCheckBuilder(this.campaign, this.actorId, this.wrap, this.checkBuilder.withModifier(label, value), this.actionDescription);
+  }
+
   against(opposition: CheckOpposition): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: CharacterCheckOutcome } } {
     const ready = this.checkBuilder.against(opposition);
     return this.makeRoller((diceRoller) => {
@@ -48,10 +57,15 @@ export class ScopedCheckBuilder<TRoot> {
     });
   }
 
-  againstCharacter(defenderIdOrName: string, defenderSkillIdOrName: string): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: OpposedCharacterCheckOutcome } } {
+  againstCharacter(defenderIdOrName: string, defenderSkillIdOrName: string, configureDefender?: (b: OpposedParticipantBuilder) => OpposedParticipantBuilder): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: OpposedCharacterCheckOutcome } } {
     const defender = this.campaign.requireCharacter(defenderIdOrName);
     if (defender.id === this.actorId) throw new Error(`Character cannot oppose themselves: ${defender.name}`);
-    const ready = this.checkBuilder.againstCharacter(defender, defenderSkillIdOrName);
+    const guard = (b: OpposedParticipantBuilder): OpposedParticipantBuilder =>
+      Object.freeze(Object.assign(Object.create(b) as object, {
+        withStatus: (s: string) => { this.requireStatusesEnabled(); return guard(b.withStatus(s)); },
+        withModifier: (l: string, v: number) => guard(b.withModifier(l, v)),
+      })) as OpposedParticipantBuilder;
+    const ready = this.checkBuilder.againstCharacter(defender, defenderSkillIdOrName, configureDefender && ((b) => configureDefender(guard(b))));
     return this.makeRoller((diceRoller) => {
       const outcome = ready.roll(diceRoller);
       return [outcome, this.campaign.recordRoll([outcome.actor, outcome.defender], {
@@ -61,6 +75,10 @@ export class ScopedCheckBuilder<TRoot> {
         actorXpEarned: outcome.actorXpEarned, defenderXpEarned: outcome.defenderXpEarned,
       })];
     });
+  }
+
+  private requireStatusesEnabled(): void {
+    if (!this.campaign.rules.statusesEnabled) throw new Error('Statuses are disabled in this campaign');
   }
 
   private makeRoller<TOutcome>(exec: (diceRoller: DiceRoller) => readonly [TOutcome, Campaign]): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: TOutcome } } {

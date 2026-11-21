@@ -15,6 +15,7 @@ export function CampaignSettingsDialog(props: CampaignSettingsDialogProps): Reac
   const rules = workspace.activeCampaign.campaign.rules;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [tiesMode, setTiesMode] = useState<TiesMode>(rules.tiesMode);
+  const [statusesEnabled, setStatusesEnabled] = useState(rules.statusesEnabled);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const baseId = useId();
 
@@ -23,17 +24,18 @@ export function CampaignSettingsDialog(props: CampaignSettingsDialogProps): Reac
     if (!dialog) return;
     if (open && !dialog.open) {
       setTiesMode(rules.tiesMode);
+      setStatusesEnabled(rules.statusesEnabled);
       setDialogError(null);
       dialog.showModal();
     } else if (!open && dialog.open) {
       dialog.close();
     }
-  }, [open, rules.tiesMode]);
+  }, [open, rules.tiesMode, rules.statusesEnabled]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      onChange(workspace.activeCampaign.withRules({ tiesMode }));
+      onChange(workspace.activeCampaign.withRules({ tiesMode, statusesEnabled }));
       onClose();
     } catch (err: unknown) {
       setDialogError(err instanceof Error ? err.message : 'Unable to update campaign rules.');
@@ -50,6 +52,10 @@ export function CampaignSettingsDialog(props: CampaignSettingsDialogProps): Reac
           <option value="fail">Basic Rules — Ties Fail (+1 XP)</option>
           <option value="twist">Advanced Rules — Partial Success with Twist (0 XP)</option>
         </select>
+        <label className="row">
+          <input type="checkbox" checked={statusesEnabled} onChange={(e) => setStatusesEnabled(e.target.checked)} />
+          Enable Statuses (persistent bonuses &amp; penalties)
+        </label>
         <div className="row">
           <button type="submit" className="btn btn-primary">Save Rules</button>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>

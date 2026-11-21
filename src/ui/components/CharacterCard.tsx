@@ -1,15 +1,22 @@
 import type React from 'react';
+import type { Workspace } from '../../campaign';
 import type { Character } from '../../character';
+import type { DiceRoller } from '../../dice';
+import { StatusManager } from './StatusManager';
 
 export interface CharacterCardProps {
+  readonly workspace: Workspace;
   readonly character: Character;
+  readonly diceRoller: DiceRoller;
   readonly isSelected: boolean;
   readonly onSelectForCheck: (characterId: string) => void;
   readonly onRemove: (characterId: string) => void;
+  readonly onChange: (next: Workspace) => void;
+  readonly onError: (message: string) => void;
 }
 
 export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
-  const { character, isSelected, onSelectForCheck, onRemove } = props;
+  const { workspace, character, diceRoller, isSelected, onSelectForCheck, onRemove, onChange, onError } = props;
   const pending = character.pendingAdvancement;
 
   return (
@@ -19,6 +26,7 @@ export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
         <span className="badge">{character.xp} XP</span>
       </div>
       {pending && <div><span className="badge badge-ready">Level {pending.targetLevel} skill ready</span></div>}
+      <StatusManager workspace={workspace} character={character} diceRoller={diceRoller} onChange={onChange} onError={onError} />
       <ul className="skill-list">
         {character.skills.map((skill) => {
           const parent = skill.parentSkillId ? character.skills.find((s) => s.id === skill.parentSkillId) : undefined;

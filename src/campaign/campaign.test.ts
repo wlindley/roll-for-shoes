@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller } from '../dice';
 import { CheckResult, RolledOpposition, RolledPool, StaticOpposition } from '../checks';
-import { AdvancementOutcome, Character, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome } from '../character';
+import { AdvancementOutcome, Character, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, Status } from '../character';
 import { BASIC_CAMPAIGN_RULES, Campaign, CampaignCharacterScope, type CampaignRollLogEntry, type CampaignRulesConfig, LocalStorageAdapter, MemoryStorageAdapter, ScopedAdvancementBuilder, ScopedCheckBuilder, type StorageAdapter, Workspace, WorkspaceCampaignScope } from './index';
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -265,5 +265,28 @@ describe('campaign module — Incremental Advanced Rules (Ties)', () => {
       .toEqual(['fail', 'failure', 1, 'fail', 'failure', 1, 0, 2, 0]);
     expect([restWs.activeCampaign.campaign.rollLog[0]?.checkResult.tiesMode, restWs.activeCampaign.campaign.rollLog[0]?.checkResult.outcome, restCmp.rollLog[1]?.checkResult.tiesMode, restCmp.rollLog[1]?.checkResult.outcome])
       .toEqual(['twist', 'tie', 'twist', 'tie']);
+  });
+
+  it('CMP-STS-01: enforces rules.statusesEnabled on actor/defender withStatus and persists statuses & modifiers via LocalStorageAdapter', async () => {
+    const ws0 = Workspace.empty().createCampaign('Brawl').activeCampaign.addCharacter('Alice').activeCampaign.addCharacter('Bob')
+      .activeCampaign.character('Alice').update((c) => c.addStatus(Status.create('Clean Shoe', 2))).workspace
+      .activeCampaign.character('Bob').update((c) => c.addStatus(Status.roll('Broken Nose', 1, 'negative', new StubDiceRoller([3])))).workspace;
+    expect(() => ws0.activeCampaign.character('Alice').makeCheck('Do Anything').withStatus('Clean Shoe')).toThrow(/status/i);
+    expect(() => ws0.activeCampaign.character('Alice').makeCheck('Do Anything').againstCharacter('Bob', 'Do Anything', (b) => b.withStatus('Broken Nose'))).toThrow(/status/i);
+    const sit = ws0.activeCampaign.character('Alice').makeCheck('Do Anything').withModifier('Rain', -2).againstCharacter('Bob', 'Do Anything', (b) => b.withModifier('Cover', 1)).roll(new StubDiceRoller([5, 3]));
+    const ws1 = ws0.activeCampaign.withRules({ statusesEnabled: true });
+    const [sb1, sb2] = [ws1.activeCampaign.character('Alice').makeCheck('Do Anything'), ws1.activeCampaign.character('Alice').makeCheck('Do Anything').withAction('Strike').withStatus('Clean Shoe').withModifier('Grip', 1)];
+    const r1 = sb2.against(new StaticOpposition(6)).roll(new StubDiceRoller([4]));
+    const r2 = r1.workspace.activeCampaign.character('Alice').makeCheck('Do Anything').withStatus('Clean Shoe').againstCharacter('Bob', 'Do Anything', (b) => b.withStatus('Broken Nose').withModifier('Guard', 1)).roll(new StubDiceRoller([2, 5]));
+    const local = new LocalStorageAdapter();
+    await local.clear(); await r2.workspace.save(local);
+    const loaded = await Workspace.load(new LocalStorageAdapter());
+    await local.clear();
+    for (const [prev, next] of [[ws0, sit.workspace], [ws0, ws1], [sb1, sb2], [ws1, r1.workspace], [r1.workspace, r2.workspace], [r2.workspace, loaded]] as const) expect(next).not.toBe(prev);
+    const [cmp, e0, e1] = [loaded.activeCampaign.campaign, loaded.activeCampaign.campaign.rollLog[0]!, loaded.activeCampaign.campaign.rollLog[1]!];
+    expect([sit.outcome.checkResult.actor.finalTotal, sit.outcome.checkResult.opposition.total, sit.outcome.checkResult.outcome, cmp.findCharacter('Alice')?.statuses[0] instanceof Status, cmp.findCharacter('Alice')?.statuses[0]?.rating, cmp.findCharacter('Bob')?.statuses[0]?.rating])
+      .toEqual([3, 4, 'failure', true, 2, -3]);
+    expect([e0.checkResult.actor.modifiers, e0.checkResult.actor.finalTotal, e0.checkResult.opposition.pool?.modifiers, e0.checkResult.opposition.total, e0.checkResult.outcome, e1.actionDescription, e1.checkResult.actor.modifiers, e1.checkResult.actor.finalTotal])
+      .toEqual([[{ label: 'Clean Shoe', value: 2 }], 4, [{ label: 'Broken Nose', value: -3 }, { label: 'Guard', value: 1 }], 3, 'success', 'Strike', [{ label: 'Clean Shoe', value: 2 }, { label: 'Grip', value: 1 }], 7]);
   });
 });
