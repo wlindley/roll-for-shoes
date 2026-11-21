@@ -1,5 +1,5 @@
 import type { DiceRoller, DieValue } from '../dice';
-import { Check, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition } from '../checks';
+import { Check, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type TiesMode } from '../checks';
 import type { Character } from './character';
 import { resolveId, type Skill } from './skill';
 
@@ -53,27 +53,41 @@ export class ReadyCharacterCheck {
     private readonly character: Character,
     private readonly skillUsed: Skill,
     private readonly opposition: CheckOpposition,
-    private readonly actionDescription?: string,
+    private readonly actionDescription: string | undefined,
+    private readonly tiesMode: TiesMode,
   ) { Object.freeze(this); }
 
+  withTiesMode(tiesMode: TiesMode): ReadyCharacterCheck {
+    return new ReadyCharacterCheck(this.character, this.skillUsed, this.opposition, this.actionDescription, tiesMode);
+  }
+
   roll(diceRoller: DiceRoller): CharacterCheckOutcome {
-    const checkResult = Check.withDice(this.skillUsed.level).against(this.opposition).resolve(diceRoller);
+    const checkResult = Check.withDice(this.skillUsed.level).withTiesMode(this.tiesMode).against(this.opposition).resolve(diceRoller);
     const next = this.character.applyRoll(this.skillUsed, checkResult.actor.rawDice, checkResult.outcome, xpForOutcome(checkResult.outcome), this.actionDescription);
     return new CharacterCheckOutcome(next, this.skillUsed, checkResult);
   }
 }
 
 export class CharacterCheckBuilder {
-  constructor(private readonly character: Character, private readonly skillUsed: Skill, private readonly actionDescription?: string) {
+  constructor(
+    private readonly character: Character,
+    private readonly skillUsed: Skill,
+    private readonly actionDescription?: string,
+    private readonly tiesMode: TiesMode = 'fail',
+  ) {
     Object.freeze(this);
   }
 
   withAction(description: string): CharacterCheckBuilder {
-    return new CharacterCheckBuilder(this.character, this.skillUsed, description);
+    return new CharacterCheckBuilder(this.character, this.skillUsed, description, this.tiesMode);
+  }
+
+  withTiesMode(tiesMode: TiesMode): CharacterCheckBuilder {
+    return new CharacterCheckBuilder(this.character, this.skillUsed, this.actionDescription, tiesMode);
   }
 
   against(opposition: CheckOpposition): ReadyCharacterCheck {
-    return new ReadyCharacterCheck(this.character, this.skillUsed, opposition, this.actionDescription);
+    return new ReadyCharacterCheck(this.character, this.skillUsed, opposition, this.actionDescription, this.tiesMode);
   }
 
   againstCharacter(defender: Character, defenderSkillIdOrName: string): ReadyOpposedCharacterCheck {
@@ -83,6 +97,7 @@ export class CharacterCheckBuilder {
       defender,
       defender.skill(defenderSkillIdOrName),
       this.actionDescription,
+      this.tiesMode,
     );
   }
 }
@@ -108,16 +123,23 @@ export class ReadyOpposedCharacterCheck {
     private readonly actorSkill: Skill,
     private readonly defender: Character,
     private readonly defenderSkill: Skill,
-    private readonly actionDescription?: string,
+    private readonly actionDescription: string | undefined,
+    private readonly tiesMode: TiesMode,
   ) {
     Object.freeze(this);
   }
 
+  withTiesMode(tiesMode: TiesMode): ReadyOpposedCharacterCheck {
+    return new ReadyOpposedCharacterCheck(this.actor, this.actorSkill, this.defender, this.defenderSkill, this.actionDescription, tiesMode);
+  }
+
   roll(diceRoller: DiceRoller): OpposedCharacterCheckOutcome {
     const checkResult = Check.withDice(this.actorSkill.level)
+      .withTiesMode(this.tiesMode)
       .against(new RolledOpposition(this.defenderSkill.level))
       .resolve(diceRoller);
-    const defenderOutcome: CheckOutcome = checkResult.outcome === 'success' ? 'failure' : 'success';
+    const defenderOutcome: CheckOutcome =
+      checkResult.outcome === 'tie' ? 'tie' : checkResult.outcome === 'success' ? 'failure' : 'success';
     const nextActor = this.actor.applyRoll(
       this.actorSkill,
       checkResult.actor.rawDice,

@@ -342,3 +342,73 @@ describe('character module — serialization & deserialization', () => {
     }
   });
 });
+
+describe('character module — Ties (withTiesMode)', () => {
+  it('CHR-TIE-01: character tie with withTiesMode("twist") earns 0 XP while preserving immutability and win/loss behavior', () => {
+    const bob = Character.create('Bob').addSkill('Climbing', 2);
+    const baseBuilder = bob.makeCheck('Climbing');
+    const twistBuilder = baseBuilder.withTiesMode('twist');
+    expect(twistBuilder).not.toBe(baseBuilder);
+    const beforeTie = twistBuilder.against(new StaticOpposition(7)).roll(new StubDiceRoller([3, 4]));
+    const baseFail = baseBuilder.against(new StaticOpposition(7)).roll(new StubDiceRoller([3, 4]));
+    expect(beforeTie.character).not.toBe(bob);
+    expect([bob.xp, beforeTie.checkResult.tiesMode, beforeTie.checkResult.outcome, beforeTie.checkResult.margin, beforeTie.xpEarned, beforeTie.character.xp, beforeTie.canAdvance, beforeTie.character.pendingAdvancement])
+      .toEqual([0, 'twist', 'tie', 0, 0, 0, false, null]);
+    expect([baseFail.checkResult.tiesMode, baseFail.checkResult.outcome, baseFail.xpEarned, baseFail.character.xp]).toEqual(['fail', 'failure', 1, 1]);
+
+    const baseReady = baseBuilder.against(new StaticOpposition(7));
+    const twistReady = baseReady.withTiesMode('twist');
+    const failReady = twistReady.withTiesMode('fail');
+    expect(twistReady).not.toBe(baseReady);
+    expect(failReady).not.toBe(twistReady);
+    const [afterTie, origFail, switchedFail, win, loss] = [
+      twistReady.roll(new StubDiceRoller([3, 4])), baseReady.roll(new StubDiceRoller([3, 4])),
+      failReady.roll(new StubDiceRoller([3, 4])), twistReady.roll(new StubDiceRoller([4, 5])), twistReady.roll(new StubDiceRoller([2, 3])),
+    ];
+    expect([afterTie.checkResult.outcome, afterTie.xpEarned, afterTie.character.xp, origFail.checkResult.outcome, origFail.xpEarned, switchedFail.checkResult.outcome, switchedFail.xpEarned, win.checkResult.outcome, win.xpEarned, loss.checkResult.outcome, loss.xpEarned])
+      .toEqual(['tie', 0, 0, 'failure', 1, 'failure', 1, 'success', 0, 'failure', 1]);
+  });
+
+  it('CHR-TIE-02: allows advancement on a "tie" via natural all-6s (0 XP) or banked XP', () => {
+    const bob = Character.create('Bob');
+    const natTie = bob.makeCheck('Do Anything').withTiesMode('twist').withAction('Grab ledge').against(new StaticOpposition(6)).roll(new StubDiceRoller([6]));
+    expect(natTie.character).not.toBe(bob);
+    const np = natTie.character.pendingAdvancement!;
+    const restoredNat = Character.deserialize(natTie.character.serialize());
+    const natClaim = restoredNat.advance('Grip').claim();
+    expect([natTie.checkResult.outcome, natTie.xpEarned, natTie.character.xp, natTie.canAdvanceNaturally, np.checkOutcome, np.actionDescription, np.xpCostToAdvance, restoredNat.pendingAdvancement?.checkOutcome, natClaim.createdSkill.name, natClaim.createdSkill.level, natClaim.totalXpSpent])
+      .toEqual(['tie', 0, 0, true, 'tie', 'Grab ledge', 0, 'tie', 'Grip', 2, 0]);
+
+    const bobWith1Xp = Character.create('Bob').addSkill('Climbing', 2).makeCheck('Do Anything').against(new StaticOpposition(6)).roll(new StubDiceRoller([1])).character;
+    const bankedTie = bobWith1Xp.makeCheck('Climbing').withAction('Scale wall').withTiesMode('twist').against(new StaticOpposition(9)).roll(new StubDiceRoller([6, 3]));
+    expect(bankedTie.character).not.toBe(bobWith1Xp);
+    const bp = bankedTie.character.pendingAdvancement!;
+    const claimed = bankedTie.character.advance('Ledge Grab').claim();
+    expect(claimed.character).not.toBe(bankedTie.character);
+    expect([bankedTie.checkResult.outcome, bankedTie.xpEarned, bankedTie.character.xp, bp.checkOutcome, bp.actionDescription, bp.xpCostToAdvance, claimed.createdSkill.name, claimed.createdSkill.level, claimed.totalXpSpent, claimed.character.xp, claimed.character.pendingAdvancement])
+      .toEqual(['tie', 0, 1, 'tie', 'Scale wall', 1, 'Ledge Grab', 3, 1, 0, null]);
+  });
+
+  it('CHR-TIE-03: character-vs-character opposed tie with "twist" awards 0 XP to both and preserves natural-6 advancement', () => {
+    const [alice, bob] = [Character.create('Alice'), Character.create('Bob')];
+    const beforeBuilder = alice.makeCheck('Do Anything').withTiesMode('twist').withAction('Parry');
+    const beforeRes = beforeBuilder.againstCharacter(bob, 'Do Anything').roll(new StubDiceRoller([4, 4]));
+    expect([beforeRes.actor !== alice, beforeRes.defender !== bob, beforeRes.checkResult.outcome, beforeRes.checkResult.tiesMode, beforeRes.checkResult.margin, beforeRes.actorXpEarned, beforeRes.defenderXpEarned, beforeRes.actor.xp, beforeRes.defender.xp, beforeRes.actor.pendingAdvancement, beforeRes.defender.pendingAdvancement])
+      .toEqual([true, true, 'tie', 'twist', 0, 0, 0, 0, 0, null, null]);
+
+    const baseOpposed = alice.makeCheck('Do Anything').againstCharacter(bob, 'Do Anything');
+    const twistOpposed = baseOpposed.withTiesMode('twist');
+    const failOpposed = twistOpposed.withTiesMode('fail');
+    expect(twistOpposed).not.toBe(baseOpposed);
+    expect(failOpposed).not.toBe(twistOpposed);
+    const [afterRes, origRes, switchedRes, sixTie] = [
+      twistOpposed.roll(new StubDiceRoller([4, 4])), baseOpposed.roll(new StubDiceRoller([4, 4])),
+      failOpposed.roll(new StubDiceRoller([4, 4])), twistOpposed.roll(new StubDiceRoller([6, 6])),
+    ];
+    expect([afterRes.checkResult.outcome, afterRes.actorXpEarned, afterRes.defenderXpEarned, origRes.checkResult.outcome, origRes.actorXpEarned, origRes.defenderXpEarned, switchedRes.checkResult.outcome, switchedRes.actorXpEarned])
+      .toEqual(['tie', 0, 0, 'failure', 1, 0, 'failure', 1]);
+    const [ap, dp] = [sixTie.actor.pendingAdvancement!, sixTie.defender.pendingAdvancement!];
+    expect([sixTie.checkResult.outcome, sixTie.actorXpEarned, sixTie.defenderXpEarned, sixTie.actor.xp, sixTie.defender.xp, ap.checkOutcome, ap.xpCostToAdvance, dp.checkOutcome, dp.xpCostToAdvance])
+      .toEqual(['tie', 0, 0, 0, 0, 'tie', 0, 'tie', 0]);
+  });
+});

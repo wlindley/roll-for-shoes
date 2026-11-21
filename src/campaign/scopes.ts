@@ -12,7 +12,12 @@ export class CampaignCharacterScope<TRoot> {
     return this.wrap(this.campaign.replaceCharacter(transform(this.character)));
   }
   makeCheck(skillIdOrName: string): ScopedCheckBuilder<TRoot> {
-    return new ScopedCheckBuilder(this.campaign, this.character.id, this.wrap, this.character.makeCheck(skillIdOrName));
+    return new ScopedCheckBuilder(
+      this.campaign,
+      this.character.id,
+      this.wrap,
+      this.character.makeCheck(skillIdOrName).withTiesMode(this.campaign.rules.tiesMode),
+    );
   }
   advance(newSkillName: string): ScopedAdvancementBuilder<TRoot> {
     return new ScopedAdvancementBuilder(this.campaign, this.wrap, this.character.advance(newSkillName));

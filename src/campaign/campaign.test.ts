@@ -245,3 +245,25 @@ describe('campaign module — persistence, StorageAdapter & JSON import/export',
     }
   });
 });
+
+describe('campaign module — Incremental Advanced Rules (Ties)', () => {
+  it('CMP-TIE-01: forwards campaign.rules.tiesMode ("twist" vs "fail") on single and opposed checks and round-trips rollLog', () => {
+    const ws = Workspace.empty().createCampaign('Heist', { rules: { tiesMode: 'twist' } }).activeCampaign.addCharacter('Alice').activeCampaign.addCharacter('Bob');
+    const r1 = ws.activeCampaign.character('Alice').makeCheck('Do Anything').withAction('Leap').against(new StaticOpposition(4)).roll(new StubDiceRoller([4]));
+    const r2 = r1.workspace.activeCampaign.character('Alice').makeCheck('Do Anything').againstCharacter('Bob', 'Do Anything').roll(new StubDiceRoller([4, 4]));
+    const wsFail = r2.workspace.activeCampaign.withRules({ tiesMode: 'fail' });
+    const r3 = wsFail.activeCampaign.character('Alice').makeCheck('Do Anything').against(new StaticOpposition(4)).roll(new StubDiceRoller([4]));
+    const r4 = r3.campaign.character('Alice').makeCheck('Do Anything').againstCharacter('Bob', 'Do Anything').roll(new StubDiceRoller([4, 4]));
+    const [restWs, restCmp] = [Workspace.deserialize(r2.workspace.serialize()), Campaign.fromJson(r2.campaign.exportJson())];
+    for (const [prev, next] of [[ws, r1.workspace], [r1.workspace, r2.workspace], [r2.workspace, wsFail], [wsFail, r3.workspace], [r3.campaign, r4.campaign], [r2.workspace, restWs], [r2.campaign, restCmp]] as const) expect(next).not.toBe(prev);
+    const [eOpposed, eStatic] = [r2.campaign.rollLog[0]!, r2.campaign.rollLog[1]!];
+    expect([r1.outcome.checkResult.tiesMode, r1.outcome.checkResult.outcome, r1.outcome.xpEarned, r2.outcome.checkResult.tiesMode, r2.outcome.checkResult.outcome, r2.outcome.actorXpEarned, r2.outcome.defenderXpEarned, r2.campaign.findCharacter('Alice')?.xp, r2.campaign.findCharacter('Bob')?.xp])
+      .toEqual(['twist', 'tie', 0, 'twist', 'tie', 0, 0, 0, 0]);
+    expect([eOpposed.checkResult.tiesMode, eOpposed.checkResult.outcome, eOpposed.actorXpEarned, eOpposed.defenderXpEarned, eStatic.checkResult.tiesMode, eStatic.checkResult.outcome, eStatic.actorXpEarned])
+      .toEqual(['twist', 'tie', 0, 0, 'twist', 'tie', 0]);
+    expect([r3.outcome.checkResult.tiesMode, r3.outcome.checkResult.outcome, r3.outcome.xpEarned, r4.outcome.checkResult.tiesMode, r4.outcome.checkResult.outcome, r4.outcome.actorXpEarned, r4.outcome.defenderXpEarned, r4.campaign.findCharacter('Alice')?.xp, r4.campaign.findCharacter('Bob')?.xp])
+      .toEqual(['fail', 'failure', 1, 'fail', 'failure', 1, 0, 2, 0]);
+    expect([restWs.activeCampaign.campaign.rollLog[0]?.checkResult.tiesMode, restWs.activeCampaign.campaign.rollLog[0]?.checkResult.outcome, restCmp.rollLog[1]?.checkResult.tiesMode, restCmp.rollLog[1]?.checkResult.outcome])
+      .toEqual(['twist', 'tie', 'twist', 'tie']);
+  });
+});
