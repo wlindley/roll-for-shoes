@@ -222,3 +222,117 @@ describe('checks module — DifficultyTier, DifficultyOpposition & Ties', () => 
     ]).toEqual(['failure', 'failure', 'tie']);
   });
 });
+
+describe('checks module — Symmetric Actor & Opponent Status Modifiers', () => {
+  it('CHK-STS-01: applies actor negative penalty (-4 Raining) immutably on Check and ReadyCheck', () => {
+    const baseCheck = Check.withDice(3);
+    const modCheck = baseCheck.withModifier('Raining', -4);
+    expect(modCheck).not.toBe(baseCheck);
+    const res = modCheck.against(new StaticOpposition(9)).resolve(new StubDiceRoller([3, 5, 6]));
+    const origRes = baseCheck.against(new StaticOpposition(9)).resolve(new StubDiceRoller([3, 5, 6]));
+    expect([res.actor.rawTotal, res.actor.modifierTotal, res.actor.finalTotal, res.actor.modifiers, res.outcome, res.margin, res.actor.nonSixCount, origRes.actor.modifierTotal, origRes.actor.finalTotal])
+      .toEqual([14, -4, 10, [{ label: 'Raining', value: -4 }], 'success', 1, 2, 0, 14]);
+
+    const baseReady = baseCheck.against(new StaticOpposition(9));
+    const modReady = baseReady.withModifier('Raining', -4);
+    expect(modReady).not.toBe(baseReady);
+    expect([modReady.resolve(new StubDiceRoller([3, 5, 6])).actor.finalTotal, baseReady.resolve(new StubDiceRoller([3, 5, 6])).actor.finalTotal])
+      .toEqual([10, 14]);
+  });
+
+  it('CHK-STS-02: actor positive bonus (+2 Clean Shoe) turns failing raw roll into success', () => {
+    const res = Check.withDice(2).withModifier('Clean Shoe', 2).against(new StaticOpposition(6)).resolve(new StubDiceRoller([2, 3]));
+    expect([res.actor.rawTotal, res.actor.modifierTotal, res.actor.finalTotal, res.margin, res.outcome])
+      .toEqual([5, 2, 7, 1, 'success']);
+  });
+
+  it('CHK-STS-03: actor natural all-6s remains true despite negative penalty causing failure', () => {
+    const res = Check.withDice(2).withModifier('Broken Nose', -3).against(new StaticOpposition(10)).resolve(new StubDiceRoller([6, 6]));
+    expect([res.actor.rawTotal, res.actor.finalTotal, res.outcome, res.actor.naturalAllSixes, res.actor.nonSixCount])
+      .toEqual([12, 9, 'failure', true, 0]);
+  });
+
+  it('CHK-STS-04: actor positive bonus does NOT manufacture fake 6s on rawDice', () => {
+    const res = Check.withDice(2).withModifier('Inspired', 4).against(new StaticOpposition(10)).resolve(new StubDiceRoller([4, 4]));
+    expect([res.actor.rawTotal, res.actor.finalTotal, res.outcome, res.actor.naturalAllSixes, res.actor.nonSixCount])
+      .toEqual([8, 12, 'success', false, 2]);
+  });
+
+  it('CHK-STS-05: combines multiple actor modifiers additively (including negative finalTotal) and preserves tiesMode', () => {
+    const mods: CheckModifier[] = [{ label: 'Rain', value: -4 }, { label: 'Grip', value: 1 }];
+    const baseCheck = Check.withDice(1);
+    const modCheck = baseCheck.withModifiers(mods);
+    mods.push({ label: 'Mutated', value: 99 });
+    expect(modCheck).not.toBe(baseCheck);
+    const res = modCheck.against(new StaticOpposition(1)).resolve(new StubDiceRoller([1]));
+    const origRes = baseCheck.against(new StaticOpposition(1)).resolve(new StubDiceRoller([1]));
+    expect([res.actor.modifierTotal, res.actor.finalTotal, res.margin, res.outcome, origRes.actor.modifierTotal])
+      .toEqual([-3, -2, -3, 'failure', 0]);
+
+    const baseReady = Check.withDice(1).withTiesMode('twist').withModifier('Base', 1).against(new StaticOpposition(5));
+    const readyMods: CheckModifier[] = [{ label: 'Boost', value: 2 }];
+    const chainedReady = baseReady.withModifiers(readyMods).withModifier('Cap', -1);
+    readyMods.push({ label: 'Mutated', value: 50 });
+    expect(chainedReady).not.toBe(baseReady);
+    const [chainedRes, baseReadyRes, toggledFailRes, revOrderRes] = [
+      chainedReady.resolve(new StubDiceRoller([3])), baseReady.resolve(new StubDiceRoller([3])),
+      chainedReady.withTiesMode('fail').resolve(new StubDiceRoller([3])),
+      Check.withDice(1).withModifier('Base', 2).withTiesMode('twist').against(new StaticOpposition(5)).resolve(new StubDiceRoller([3])),
+    ];
+    expect([chainedRes.actor.modifierTotal, chainedRes.actor.finalTotal, chainedRes.outcome, baseReadyRes.actor.finalTotal, baseReadyRes.outcome, toggledFailRes.actor.finalTotal, toggledFailRes.outcome, revOrderRes.outcome])
+      .toEqual([2, 5, 'tie', 4, 'failure', 5, 'failure', 'tie']);
+  });
+
+  it('CHK-STS-06: opponent negative penalty reduces opposition.total immutably on RolledOpposition', () => {
+    const baseOpp = new RolledOpposition(1, { label: 'Sentry', modifiers: [{ label: 'Alert', value: 1 }] });
+    const chainedOpp = baseOpp.withModifier('Dazed', -2);
+    expect(chainedOpp).not.toBe(baseOpp);
+    expect([baseOpp.modifiers, chainedOpp.diceCount, chainedOpp.label, chainedOpp.modifiers])
+      .toEqual([[{ label: 'Alert', value: 1 }], 1, 'Sentry', [{ label: 'Alert', value: 1 }, { label: 'Dazed', value: -2 }]]);
+
+    const res = Check.withDice(1).against(new RolledOpposition(1).withModifier('Blinded', -3)).resolve(new StubDiceRoller([3, 5]));
+    expect([res.opposition.pool?.rawTotal, res.opposition.pool?.modifierTotal, res.opposition.total, res.outcome, res.margin])
+      .toEqual([5, -3, 2, 'success', 1]);
+  });
+
+  it('CHK-STS-07: opponent positive bonus increases opposition.total (turning actor win into failure)', () => {
+    const res = Check.withDice(1).against(new RolledOpposition(1).withModifier('Armored', 2)).resolve(new StubDiceRoller([5, 4]));
+    expect([res.opposition.pool?.rawTotal, res.opposition.total, res.outcome, res.margin]).toEqual([4, 6, 'failure', -1]);
+  });
+
+  it('CHK-STS-08: opponent natural all-6s remains true despite negative opponent penalty causing loss', () => {
+    const res = Check.withDice(1).against(new RolledOpposition(2).withModifier('Dazed', -8)).resolve(new StubDiceRoller([5, 6, 6]));
+    expect([res.opposition.total, res.outcome, res.opposition.pool?.naturalAllSixes, res.opposition.pool?.nonSixCount])
+      .toEqual([4, 'success', true, 0]);
+  });
+
+  it('CHK-STS-09: opponent positive bonus does NOT manufacture fake 6s on opponent rawDice', () => {
+    const res = Check.withDice(1).against(new RolledOpposition(2).withModifier('Boost', 4)).resolve(new StubDiceRoller([3, 4, 4]));
+    expect([res.opposition.total, res.outcome, res.opposition.pool?.naturalAllSixes, res.opposition.pool?.nonSixCount])
+      .toEqual([12, 'failure', false, 2]);
+  });
+
+  it('CHK-STS-10: combines multiple opponent modifiers additively (negative total & DifficultyOpposition.withModifier)', () => {
+    const baseDyn = new DifficultyOpposition(DifficultyTier.Easy, 'dynamic', { label: 'Lock', modifiers: [{ label: 'Rusty', value: -5 }] });
+    const dynOpp = baseDyn.withModifier('Oil', 1);
+    expect(dynOpp).not.toBe(baseDyn);
+    expect([baseDyn.modifiers, dynOpp.tier, dynOpp.mode, dynOpp.label, dynOpp.modifiers])
+      .toEqual([[{ label: 'Rusty', value: -5 }], DifficultyTier.Easy, 'dynamic', 'Lock', [{ label: 'Rusty', value: -5 }, { label: 'Oil', value: 1 }]]);
+    const dynRes = Check.withDice(1).against(dynOpp).resolve(new StubDiceRoller([1, 2]));
+    expect([dynRes.opposition.pool?.rawTotal, dynRes.opposition.pool?.modifierTotal, dynRes.opposition.total, dynRes.outcome, dynRes.margin])
+      .toEqual([2, -4, -2, 'success', 3]);
+
+    const baseStat = new DifficultyOpposition(DifficultyTier.Moderate, 'static', { label: 'Door' });
+    const statOpp = baseStat.withModifier('Barred', 2).withModifier('Cracked', -1);
+    expect(statOpp).not.toBe(baseStat);
+    const statRes = Check.withDice(1).against(statOpp).resolve(new StubDiceRoller([6]));
+    expect([baseStat.modifiers, statRes.opposition.total, statRes.opposition.pool, statRes.opposition.label, statRes.outcome])
+      .toEqual([[], 7, undefined, 'Door', 'failure']);
+  });
+
+  it('CHK-STS-11: applies simultaneous actor and opponent modifiers on the same opposed check', () => {
+    const roller = new StubDiceRoller([4, 5]);
+    const res = Check.withDice(1).withModifier('Inspired', 3).against(new RolledOpposition(1).withModifier('Guard', 1)).resolve(roller);
+    expect([res.actor.finalTotal, res.opposition.total, res.outcome, res.margin, roller.remaining]).toEqual([7, 6, 'success', 1, 0]);
+  });
+});

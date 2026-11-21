@@ -36,6 +36,10 @@ export class RolledOpposition implements CheckOpposition {
     this.label = options?.label;
   }
 
+  withModifier(label: string, value: number): RolledOpposition {
+    return new RolledOpposition(this.diceCount, { modifiers: [...this.modifiers, { label, value }], label: this.label });
+  }
+
   resolve(diceRoller: DiceRoller): OppositionResult {
     const pool = new RolledPool(diceRoller.roll(this.diceCount).dice, this.modifiers);
     return Object.freeze({ total: pool.finalTotal, pool, label: this.label });
@@ -54,6 +58,10 @@ export class DifficultyOpposition implements CheckOpposition {
     this.modifiers = freezeModifiers(options?.modifiers);
     this.label = options?.label;
     Object.freeze(this);
+  }
+
+  withModifier(label: string, value: number): DifficultyOpposition {
+    return new DifficultyOpposition(this.tier, this.mode, { modifiers: [...this.modifiers, { label, value }], label: this.label });
   }
 
   resolve(diceRoller: DiceRoller): OppositionResult {
