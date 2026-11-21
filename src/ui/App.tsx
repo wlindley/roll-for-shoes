@@ -4,6 +4,7 @@ import { MemoryStorageAdapter, type StorageAdapter, Workspace } from '../campaig
 import type { DiceRoller } from '../dice';
 import { CampaignSidebar } from './components/CampaignSidebar';
 import { CharacterGrid } from './components/CharacterGrid';
+import { CheckRollerPanel } from './components/CheckRollerPanel';
 
 export type StorageMode = 'persistent' | 'memory';
 
@@ -77,6 +78,14 @@ export function App(props: AppProps): React.JSX.Element {
             </section>
             <CharacterGrid
               workspace={workspace}
+              selectedActorId={effectiveActorId}
+              onSelectActor={setSelectedActorId}
+              onChange={commitWorkspace}
+              onError={setError}
+            />
+            <CheckRollerPanel
+              workspace={workspace}
+              diceRoller={props.diceRoller}
               selectedActorId={effectiveActorId}
               onSelectActor={setSelectedActorId}
               onChange={commitWorkspace}
