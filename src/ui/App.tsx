@@ -1,7 +1,8 @@
 import type React from 'react';
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MemoryStorageAdapter, type StorageAdapter, Workspace } from '../campaign';
 import type { DiceRoller } from '../dice';
+import { CampaignSidebar } from './components/CampaignSidebar';
 
 export type StorageMode = 'persistent' | 'memory';
 
@@ -18,8 +19,6 @@ export function App(props: AppProps): React.JSX.Element {
   const activeAdapter = storageMode === 'persistent' ? props.storageAdapter : memoryAdapter;
   const [loaded, setLoaded] = useState<{ readonly adapter: StorageAdapter; readonly workspace: Workspace } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [campaignName, setCampaignName] = useState('');
-  const campaignNameId = useId();
 
   useEffect(() => {
     let cancelled = false;
@@ -44,32 +43,19 @@ export function App(props: AppProps): React.JSX.Element {
   const workspace = loaded?.adapter === activeAdapter ? loaded.workspace : null;
   const activeCampaign = workspace?.tryGetActiveCampaign() ?? null;
 
-  const handleCreateCampaign = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!workspace) return;
-    try {
-      commitWorkspace(workspace.createCampaign(campaignName));
-      setCampaignName('');
-    } catch (err: unknown) {
-      setError(toErrorMessage(err, 'Unable to create campaign.'));
-    }
-  };
-
   return (
     <div className="app-shell">
       <header className="app-header">
         <h1>Roll for Shoes</h1>
-        <div className="row">
-          <span className="badge">{storageMode === 'persistent' ? 'Persistent' : 'In-Memory'}</span>
-          <button type="button" className="btn" onClick={() => setStorageMode((m) => (m === 'persistent' ? 'memory' : 'persistent'))}>
-            Switch to {storageMode === 'persistent' ? 'In-Memory' : 'Persistent'}
-          </button>
-        </div>
+        <span className="badge">{storageMode === 'persistent' ? 'Persistent Storage' : 'In-Memory Session'}</span>
       </header>
-      <aside className="sidebar" aria-label="Campaigns">
-        <h2>Campaigns</h2>
-        <p className="muted">{workspace ? `${workspace.campaigns.length} saved` : 'Loading…'}</p>
-      </aside>
+      <CampaignSidebar
+        workspace={workspace}
+        storageMode={storageMode}
+        onToggleStorageMode={() => setStorageMode((m) => (m === 'persistent' ? 'memory' : 'persistent'))}
+        onChange={commitWorkspace}
+        onError={setError}
+      />
       <main className="main-stage">
         {error && <div className="error-banner" role="alert">{error}</div>}
         {!workspace ? (
@@ -86,12 +72,7 @@ export function App(props: AppProps): React.JSX.Element {
         ) : (
           <section className="panel stack">
             <h2>Welcome to Roll for Shoes</h2>
-            <p className="muted">Create your first campaign to begin tracking characters and rolls.</p>
-            <form className="row" onSubmit={handleCreateCampaign}>
-              <label htmlFor={campaignNameId}>Campaign name</label>
-              <input id={campaignNameId} type="text" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="Cobblestone Heist" required />
-              <button type="submit" className="btn btn-primary">Create First Campaign</button>
-            </form>
+            <p className="muted">Create a campaign or import a JSON backup from the sidebar to begin.</p>
           </section>
         )}
       </main>
