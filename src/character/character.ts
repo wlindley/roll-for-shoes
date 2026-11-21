@@ -3,6 +3,7 @@ import type { CheckOutcome } from '../checks';
 import { AdvancementOutcome, CharacterAdvancementBuilder, CharacterCheckBuilder, PendingAdvancement } from './builders';
 import { deserializeCharacter, serializeCharacter } from './serialize';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
+import type { Status } from './status';
 
 export class CharacterBuilder {
   constructor(
@@ -20,9 +21,18 @@ export class CharacterBuilder {
   }
 }
 
+function findByIdOrName<T extends { readonly id: string; readonly name: string }>(
+  items: readonly T[], idOrName: string, kind: string,
+): T {
+  const normalized = idOrName.trim().toLowerCase();
+  const found = items.find((item) => item.id === idOrName || item.name.toLowerCase() === normalized);
+  if (!found) throw new Error(`${kind} not found: ${idOrName}`);
+  return found;
+}
+
 export class Character {
   readonly skills: readonly Skill[];
-  readonly statuses: readonly never[] = Object.freeze([]);
+  readonly statuses: readonly Status[];
   readonly purchasedSlots: Readonly<Record<number, number>> = Object.freeze({});
 
   private constructor(
@@ -31,8 +41,10 @@ export class Character {
     readonly xp: number,
     skills: readonly Skill[],
     readonly pendingAdvancement: PendingAdvancement | null = null,
+    statuses: readonly Status[] = [],
   ) {
     this.skills = Object.freeze([...skills]);
+    this.statuses = Object.freeze([...statuses]);
     Object.freeze(this);
   }
 
@@ -59,16 +71,14 @@ export class Character {
   }
 
   /** @internal */
-  static rehydrate(id: string, name: string, xp: number, skills: readonly Skill[], pendingAdvancement: PendingAdvancement | null): Character {
-    return new Character(id, name, xp, skills, pendingAdvancement);
+  static rehydrate(id: string, name: string, xp: number, skills: readonly Skill[], pendingAdvancement: PendingAdvancement | null, statuses: readonly Status[]): Character {
+    return new Character(id, name, xp, skills, pendingAdvancement, statuses);
   }
 
-  skill(idOrName: string): Skill {
-    const normalized = idOrName.trim().toLowerCase();
-    const found = this.skills.find((s) => s.id === idOrName || s.name.toLowerCase() === normalized);
-    if (!found) throw new Error(`Skill not found: ${idOrName}`);
-    return found;
-  }
+  skill(idOrName: string): Skill { return findByIdOrName(this.skills, idOrName, 'Skill'); }
+
+  /** @internal */
+  status(idOrName: string): Status { return findByIdOrName(this.statuses, idOrName, 'Status'); }
 
   private createUniqueSkill(name: string, level: number, parentSkillId?: string): Skill {
     const created = new Skill({ name, level, parentSkillId });
@@ -80,7 +90,16 @@ export class Character {
 
   addSkill(name: string, level: number, options?: { readonly parentSkillId?: string }): Character {
     const created = this.createUniqueSkill(name, level, options?.parentSkillId);
-    return new Character(this.id, this.name, this.xp, [...this.skills, created], this.pendingAdvancement);
+    return new Character(this.id, this.name, this.xp, [...this.skills, created], this.pendingAdvancement, this.statuses);
+  }
+
+  addStatus(status: Status): Character {
+    return new Character(this.id, this.name, this.xp, this.skills, this.pendingAdvancement, [...this.statuses, status]);
+  }
+
+  removeStatus(statusIdOrName: string): Character {
+    const target = this.status(statusIdOrName);
+    return new Character(this.id, this.name, this.xp, this.skills, this.pendingAdvancement, this.statuses.filter((s) => s.id !== target.id));
   }
 
   makeCheck(skillIdOrName: string): CharacterCheckBuilder {
@@ -92,7 +111,7 @@ export class Character {
   }
 
   dismissAdvancement(): Character {
-    return new Character(this.id, this.name, this.xp, this.skills, null);
+    return new Character(this.id, this.name, this.xp, this.skills, null, this.statuses);
   }
 
   serialize(): string {
@@ -104,7 +123,7 @@ export class Character {
     const pending = this.pendingAdvancement;
     if (!pending) throw new Error('No pending advancement to claim');
     const created = this.createUniqueSkill(newSkillName, pending.targetLevel, pending.usedSkillId);
-    const next = new Character(this.id, this.name, this.xp - pending.xpCostToAdvance, [...this.skills, created], null);
+    const next = new Character(this.id, this.name, this.xp - pending.xpCostToAdvance, [...this.skills, created], null, this.statuses);
     return new AdvancementOutcome(next, created, pending.xpCostToAdvance, 0);
   }
 
@@ -125,6 +144,6 @@ export class Character {
       checkOutcome,
       actionDescription,
     });
-    return new Character(this.id, this.name, nextXp, this.skills, nextXp >= candidate.xpCostToAdvance ? candidate : null);
+    return new Character(this.id, this.name, nextXp, this.skills, nextXp >= candidate.xpCostToAdvance ? candidate : null, this.statuses);
   }
 }

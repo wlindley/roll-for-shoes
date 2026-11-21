@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller, type DieValue } from '../dice';
 import { RolledOpposition, StaticOpposition } from '../checks';
-import { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, PendingAdvancement, ReadyCharacterCheck, ReadyOpposedCharacterCheck, Skill } from './index';
+import { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, OpposedParticipantBuilder, PendingAdvancement, ReadyCharacterCheck, ReadyOpposedCharacterCheck, Skill, Status } from './index';
 
 describe('character module — Skill, Character creation & addSkill', () => {
   it('CHR-BASIC-01: creates Character with Rule 3 defaults, custom IDs, immutable builder, and Skill props', () => {
@@ -410,5 +410,71 @@ describe('character module — Ties (withTiesMode)', () => {
     const [ap, dp] = [sixTie.actor.pendingAdvancement!, sixTie.defender.pendingAdvancement!];
     expect([sixTie.checkResult.outcome, sixTie.actorXpEarned, sixTie.defenderXpEarned, sixTie.actor.xp, sixTie.defender.xp, ap.checkOutcome, ap.xpCostToAdvance, dp.checkOutcome, dp.xpCostToAdvance])
       .toEqual(['tie', 0, 0, 0, 0, 'tie', 0, 'tie', 0]);
+  });
+});
+
+describe('character module — Status & Character Status Methods', () => {
+  it('CHR-STS-01: creates and rolls positive/negative Statuses and rejects invalid names, IDs, ratings, and dice counts', () => {
+    const [rNeg, rPos] = [new StubDiceRoller([2, 4]), new StubDiceRoller([3])];
+    const [clean, nose] = [Status.create('  Clean Shoe  ', 2), Status.create('Broken Nose', -3, { id: 'st-nose', note: 'Bar fight' })];
+    const [poisoned, inspired] = [Status.roll('Poisoned', 2, 'negative', rNeg, { id: 'st-p', note: 'Venom' }), Status.roll('  Inspired ', 1, 'positive', rPos)];
+    expect([clean instanceof Status, Object.isFrozen(clean), clean.id.length > 0, clean.name, clean.rating, clean.note, nose.id, nose.rating, nose.note, poisoned.id, poisoned.name, poisoned.rating, poisoned.note, rNeg.remaining, inspired.name, inspired.rating, inspired.note, rPos.remaining])
+      .toEqual([true, true, true, 'Clean Shoe', 2, undefined, 'st-nose', -3, 'Bar fight', 'st-p', 'Poisoned', -6, 'Venom', 0, 'Inspired', 3, undefined, 0]);
+    for (const bad of ['', '   ']) { expect(() => Status.create(bad, 1)).toThrow(); expect(() => Status.roll(bad, 1, 'positive', new StubDiceRoller([2]))).toThrow(); }
+    expect(() => Status.create('Cut', -1, { id: '   ' })).toThrow();
+    for (const badRating of [0, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => Status.create('Bad', badRating)).toThrow();
+    for (const badDice of [0, -1, 1.5, Number.NaN]) expect(() => Status.roll('Bad', badDice, 'negative', new StubDiceRoller([2]))).toThrow();
+  });
+  it('CHR-STS-02: attaches, selectively applies, preserves, and removes statuses immutably by ID or case-insensitive name', () => {
+    const [clean, nose] = [Status.create('Clean Shoe', 2, { id: 'st-clean' }), Status.create('Broken Nose', -3, { id: 'st-nose' })];
+    const bob0 = Character.create('Bob').addSkill('Karate', 2);
+    const bob1 = bob0.addStatus(clean);
+    const bob2 = bob1.addStatus(nose);
+    const [b1, b2] = [bob2.makeCheck('Karate'), bob2.makeCheck('Karate').withStatus('  clean shoe  ')];
+    const b3 = b2.withModifier('Focus', 1).withTiesMode('twist').withAction('Kick');
+    for (const [prev, next] of [[bob0, bob1], [bob1, bob2], [b1, b2], [b2, b3]] as const) expect(next).not.toBe(prev);
+    const [rClean, rChained, rUnmod, rById] = [
+      b2.against(new StaticOpposition(6)).roll(new StubDiceRoller([2, 3])), b3.against(new StaticOpposition(8)).roll(new StubDiceRoller([2, 3])),
+      b1.against(new StaticOpposition(6)).roll(new StubDiceRoller([2, 3])), bob2.makeCheck('Karate').withStatus('st-nose').against(new StaticOpposition(4)).roll(new StubDiceRoller([3, 3])),
+    ];
+    expect([bob0.statuses, bob1.statuses, bob2.statuses, Object.isFrozen(bob2.statuses), rClean.checkResult.actor.finalTotal, rClean.checkResult.outcome, rChained.checkResult.outcome, rUnmod.checkResult.outcome, rById.checkResult.actor.finalTotal, rById.checkResult.outcome])
+      .toEqual([[], [clean], [clean, nose], true, 7, 'success', 'tie', 'failure', 3, 'failure']);
+    const failed = bob2.makeCheck('Do Anything').against(new StaticOpposition(5)).roll(new StubDiceRoller([1])).character;
+    expect([failed.statuses, failed.addSkill('Cook', 2).statuses, failed.dismissAdvancement().statuses, failed.advance('Sneak').claim().character.statuses])
+      .toEqual([[clean, nose], [clean, nose], [clean, nose], [clean, nose]]);
+    const withoutClean = bob2.removeStatus('  CLEAN SHOE  ');
+    const withoutBoth = withoutClean.removeStatus('st-nose');
+    expect([withoutClean !== bob2, withoutBoth !== withoutClean, bob2.statuses, withoutClean.statuses, withoutBoth.statuses, withoutClean.makeCheck('Karate').against(new StaticOpposition(6)).roll(new StubDiceRoller([2, 3])).checkResult.outcome])
+      .toEqual([true, true, [clean, nose], [nose], [], 'failure']);
+    for (const bad of ['Clean Shoe', 'Unknown', '   ']) { expect(() => withoutClean.makeCheck('Karate').withStatus(bad)).toThrow(); expect(() => withoutClean.removeStatus(bad)).toThrow(); }
+  });
+  it('CHR-STS-03: applies defender statuses and modifiers in againstCharacter immutably and rejects unknown defender status', () => {
+    const [alice, bob] = [Character.create('Alice'), Character.create('Bob').addStatus(Status.create('Shield', 2, { id: 'st-sh' })).addStatus(Status.create('Slow', -5, { id: 'st-sl' }))];
+    let builders!: readonly [OpposedParticipantBuilder, OpposedParticipantBuilder, OpposedParticipantBuilder];
+    const res = alice.makeCheck('Do Anything').withModifier('Lunge', 1).againstCharacter(bob, 'Do Anything', (b) => {
+      const s = b.withStatus('  shield '); const m = s.withModifier('Cover', 1); builders = [b, s, m]; return m;
+    }).roll(new StubDiceRoller([4, 3]));
+    const byId = alice.makeCheck('Do Anything').againstCharacter(bob, 'Do Anything', (b) => b.withStatus('st-sl')).roll(new StubDiceRoller([2, 5]));
+    expect([builders[0] instanceof OpposedParticipantBuilder, builders[1] !== builders[0], builders[2] !== builders[1], res.checkResult.actor.finalTotal, res.checkResult.opposition.total, res.checkResult.outcome, res.actorXpEarned, res.defenderXpEarned, res.actor.xp, res.defender.statuses, byId.checkResult.opposition.total, byId.checkResult.outcome, byId.defenderXpEarned])
+      .toEqual([true, true, true, 5, 6, 'failure', 1, 0, 1, bob.statuses, 0, 'success', 1]);
+    expect(() => alice.makeCheck('Do Anything').againstCharacter(bob, 'Do Anything', (b) => b.withStatus('Missing'))).toThrow();
+  });
+  it('CHR-STS-04: status or modifier penalty causing failure awards +1 XP while preserving natural all-6s 0 XP advancement', () => {
+    const bob = Character.create('Bob').addStatus(Status.create('Raining', -4));
+    const viaMod = Character.create('Bob').makeCheck('Do Anything').withModifier('Raining', -4).against(new StaticOpposition(3)).roll(new StubDiceRoller([6]));
+    const viaStatus = bob.makeCheck('Do Anything').withStatus('Raining').against(new StaticOpposition(3)).roll(new StubDiceRoller([6]));
+    const claimed = viaStatus.character.advance('Rain Grip').claim();
+    expect([viaMod.checkResult.actor.finalTotal, viaMod.checkResult.outcome, viaMod.xpEarned, viaMod.character.pendingAdvancement?.xpCostToAdvance, viaStatus.checkResult.actor.finalTotal, viaStatus.xpEarned, claimed.totalXpSpent, claimed.character.xp])
+      .toEqual([2, 'failure', 1, 0, 2, 1, 0, 1]);
+  });
+  it('CHR-STS-05: round-trips Character statuses through serialize/deserialize and rejects malformed status payloads', () => {
+    const bob = Character.create('Bob').addStatus(Status.create('Clean Shoe', 2, { id: 's-1' })).addStatus(Status.create('Broken Nose', -3, { id: 's-2', note: 'Bruised' }));
+    const restored = Character.deserialize(bob.serialize());
+    expect([restored !== bob, restored.statuses.every((s) => s instanceof Status), restored.statuses, restored.makeCheck('Do Anything').withStatus('Clean Shoe').against(new StaticOpposition(5)).roll(new StubDiceRoller([4])).checkResult.outcome])
+      .toEqual([true, true, bob.statuses, 'success']);
+    const base = JSON.parse(bob.serialize()) as Record<string, unknown>;
+    for (const badStatuses of ['bad', [null], [{ id: ' ', name: 'A', rating: 1 }], [{ id: 's', name: ' ', rating: 1 }], [{ id: 's', name: 'A', rating: 0 }], [{ id: 's', name: 'A', rating: 1.5 }], [{ id: 's', name: 'A', rating: 1, note: 9 }]]) {
+      expect(() => Character.deserialize(JSON.stringify({ ...base, statuses: badStatuses }))).toThrow();
+    }
   });
 });

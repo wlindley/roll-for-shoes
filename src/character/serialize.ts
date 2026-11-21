@@ -3,6 +3,7 @@ import type { CheckOutcome } from '../checks';
 import { PendingAdvancement } from './builders';
 import { Character } from './character';
 import { requireNonBlank, Skill } from './skill';
+import { Status } from './status';
 
 const VALID_OUTCOMES: ReadonlySet<unknown> = new Set<CheckOutcome>(['success', 'tie', 'failure']);
 
@@ -36,6 +37,7 @@ export function serializeCharacter(c: Character): string {
     name: c.name,
     xp: c.xp,
     skills: c.skills.map((s) => ({ id: s.id, name: s.name, level: s.level, parentSkillId: s.parentSkillId })),
+    statuses: c.statuses.map((s) => ({ id: s.id, name: s.name, rating: s.rating, note: s.note })),
     pendingAdvancement: pa && {
       rollId: pa.rollId,
       usedSkillId: pa.usedSkillId,
@@ -95,5 +97,13 @@ export function deserializeCharacter(serialized: string): Character {
     seenNames.add(key);
     return skill;
   });
-  return Character.rehydrate(id, name, xp, skills, parsePendingAdvancement(raw.pendingAdvancement));
+  if (!Array.isArray(raw.statuses)) throw new Error('Character statuses must be an array');
+  const statuses = raw.statuses.map((item) => {
+    if (!isRecord(item)) throw new Error('Invalid status entry');
+    return Status.create(readNonBlankString(item.name, 'Status name'), item.rating as number, {
+      id: readNonBlankString(item.id, 'Status id'),
+      note: readOptionalString(item.note, 'Status note'),
+    });
+  });
+  return Character.rehydrate(id, name, xp, skills, parsePendingAdvancement(raw.pendingAdvancement), statuses);
 }

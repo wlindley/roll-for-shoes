@@ -1,5 +1,5 @@
 import type { DiceRoller, DieValue } from '../dice';
-import { Check, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type TiesMode } from '../checks';
+import { Check, type CheckModifier, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type TiesMode } from '../checks';
 import type { Character } from './character';
 import { resolveId, type Skill } from './skill';
 
@@ -55,16 +55,32 @@ export class ReadyCharacterCheck {
     private readonly opposition: CheckOpposition,
     private readonly actionDescription: string | undefined,
     private readonly tiesMode: TiesMode,
+    private readonly modifiers: readonly CheckModifier[],
   ) { Object.freeze(this); }
 
   withTiesMode(tiesMode: TiesMode): ReadyCharacterCheck {
-    return new ReadyCharacterCheck(this.character, this.skillUsed, this.opposition, this.actionDescription, tiesMode);
+    return new ReadyCharacterCheck(this.character, this.skillUsed, this.opposition, this.actionDescription, tiesMode, this.modifiers);
   }
 
   roll(diceRoller: DiceRoller): CharacterCheckOutcome {
-    const checkResult = Check.withDice(this.skillUsed.level).withTiesMode(this.tiesMode).against(this.opposition).resolve(diceRoller);
+    const checkResult = Check.withDice(this.skillUsed.level).withModifiers(this.modifiers).withTiesMode(this.tiesMode).against(this.opposition).resolve(diceRoller);
     const next = this.character.applyRoll(this.skillUsed, checkResult.actor.rawDice, checkResult.outcome, xpForOutcome(checkResult.outcome), this.actionDescription);
     return new CharacterCheckOutcome(next, this.skillUsed, checkResult);
+  }
+}
+
+export class OpposedParticipantBuilder {
+  /** @internal */ readonly modifiers: readonly CheckModifier[];
+  constructor(private readonly defender: Character, modifiers: readonly CheckModifier[] = []) {
+    this.modifiers = Object.freeze([...modifiers]);
+    Object.freeze(this);
+  }
+  withStatus(statusIdOrName: string): OpposedParticipantBuilder {
+    const s = this.defender.status(statusIdOrName);
+    return this.withModifier(s.name, s.rating);
+  }
+  withModifier(label: string, value: number): OpposedParticipantBuilder {
+    return new OpposedParticipantBuilder(this.defender, [...this.modifiers, { label, value }]);
   }
 }
 
@@ -74,30 +90,41 @@ export class CharacterCheckBuilder {
     private readonly skillUsed: Skill,
     private readonly actionDescription?: string,
     private readonly tiesMode: TiesMode = 'fail',
+    private readonly modifiers: readonly CheckModifier[] = [],
   ) {
     Object.freeze(this);
   }
 
   withAction(description: string): CharacterCheckBuilder {
-    return new CharacterCheckBuilder(this.character, this.skillUsed, description, this.tiesMode);
+    return new CharacterCheckBuilder(this.character, this.skillUsed, description, this.tiesMode, this.modifiers);
+  }
+
+  withStatus(statusIdOrName: string): CharacterCheckBuilder {
+    const s = this.character.status(statusIdOrName);
+    return this.withModifier(s.name, s.rating);
+  }
+
+  withModifier(label: string, value: number): CharacterCheckBuilder {
+    return new CharacterCheckBuilder(this.character, this.skillUsed, this.actionDescription, this.tiesMode, [...this.modifiers, { label, value }]);
   }
 
   withTiesMode(tiesMode: TiesMode): CharacterCheckBuilder {
-    return new CharacterCheckBuilder(this.character, this.skillUsed, this.actionDescription, tiesMode);
+    return new CharacterCheckBuilder(this.character, this.skillUsed, this.actionDescription, tiesMode, this.modifiers);
   }
 
   against(opposition: CheckOpposition): ReadyCharacterCheck {
-    return new ReadyCharacterCheck(this.character, this.skillUsed, opposition, this.actionDescription, this.tiesMode);
+    return new ReadyCharacterCheck(this.character, this.skillUsed, opposition, this.actionDescription, this.tiesMode, this.modifiers);
   }
 
-  againstCharacter(defender: Character, defenderSkillIdOrName: string): ReadyOpposedCharacterCheck {
+  againstCharacter(
+    defender: Character,
+    defenderSkillIdOrName: string,
+    configureDefender?: (defenderBuilder: OpposedParticipantBuilder) => OpposedParticipantBuilder,
+  ): ReadyOpposedCharacterCheck {
+    const defenderSkill = defender.skill(defenderSkillIdOrName);
+    const defenderMods = configureDefender ? configureDefender(new OpposedParticipantBuilder(defender)).modifiers : [];
     return new ReadyOpposedCharacterCheck(
-      this.character,
-      this.skillUsed,
-      defender,
-      defender.skill(defenderSkillIdOrName),
-      this.actionDescription,
-      this.tiesMode,
+      this.character, this.skillUsed, defender, defenderSkill, this.actionDescription, this.tiesMode, this.modifiers, defenderMods,
     );
   }
 }
@@ -125,18 +152,21 @@ export class ReadyOpposedCharacterCheck {
     private readonly defenderSkill: Skill,
     private readonly actionDescription: string | undefined,
     private readonly tiesMode: TiesMode,
+    private readonly actorModifiers: readonly CheckModifier[],
+    private readonly defenderModifiers: readonly CheckModifier[],
   ) {
     Object.freeze(this);
   }
 
   withTiesMode(tiesMode: TiesMode): ReadyOpposedCharacterCheck {
-    return new ReadyOpposedCharacterCheck(this.actor, this.actorSkill, this.defender, this.defenderSkill, this.actionDescription, tiesMode);
+    return new ReadyOpposedCharacterCheck(this.actor, this.actorSkill, this.defender, this.defenderSkill, this.actionDescription, tiesMode, this.actorModifiers, this.defenderModifiers);
   }
 
   roll(diceRoller: DiceRoller): OpposedCharacterCheckOutcome {
     const checkResult = Check.withDice(this.actorSkill.level)
+      .withModifiers(this.actorModifiers)
       .withTiesMode(this.tiesMode)
-      .against(new RolledOpposition(this.defenderSkill.level))
+      .against(new RolledOpposition(this.defenderSkill.level, { modifiers: this.defenderModifiers }))
       .resolve(diceRoller);
     const defenderOutcome: CheckOutcome =
       checkResult.outcome === 'tie' ? 'tie' : checkResult.outcome === 'success' ? 'failure' : 'success';
