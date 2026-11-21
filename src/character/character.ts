@@ -1,6 +1,7 @@
 import type { DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
 import { AdvancementOutcome, CharacterAdvancementBuilder, CharacterCheckBuilder, PendingAdvancement } from './builders';
+import { deserializeCharacter, serializeCharacter } from './serialize';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
 
 export class CharacterBuilder {
@@ -53,6 +54,15 @@ export class Character {
     );
   }
 
+  static deserialize(serialized: string): Character {
+    return deserializeCharacter(serialized);
+  }
+
+  /** @internal */
+  static rehydrate(id: string, name: string, xp: number, skills: readonly Skill[], pendingAdvancement: PendingAdvancement | null): Character {
+    return new Character(id, name, xp, skills, pendingAdvancement);
+  }
+
   skill(idOrName: string): Skill {
     const normalized = idOrName.trim().toLowerCase();
     const found = this.skills.find((s) => s.id === idOrName || s.name.toLowerCase() === normalized);
@@ -83,6 +93,10 @@ export class Character {
 
   dismissAdvancement(): Character {
     return new Character(this.id, this.name, this.xp, this.skills, null);
+  }
+
+  serialize(): string {
+    return serializeCharacter(this);
   }
 
   /** @internal */

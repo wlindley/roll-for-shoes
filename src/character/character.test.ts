@@ -283,3 +283,62 @@ describe('character module — character-vs-character opposed checks', () => {
     expect([mirror.actor.xp, mirror.actor.pendingAdvancement?.xpCostToAdvance, mirror.actor.pendingAdvancement?.checkOutcome, mirror.defender.xp, mirror.defender.pendingAdvancement?.xpCostToAdvance, mirror.defender.pendingAdvancement?.checkOutcome]).toEqual([0, 0, 'success', 1, 1, 'failure']);
   });
 });
+
+describe('character module — serialization & deserialization', () => {
+  it('CHR-BASIC-24: round-trips Character with multiple skills, XP, and active pendingAdvancement without storing derived getters', () => {
+    const bob = Character.create('Bob', { id: 'char-bob' });
+    const doAnything = bob.skill(DEFAULT_STARTING_SKILL_NAME);
+    const skilled = bob.addSkill('Athletics', 2, { parentSkillId: doAnything.id }).addSkill('Cooking', 1);
+    const char = skilled.makeCheck('Athletics').withAction('Vault wall').against(new StaticOpposition(10)).roll(new StubDiceRoller([2, 6])).character;
+    const json = char.serialize();
+    const parsed = JSON.parse(json) as { schemaVersion: unknown; pendingAdvancement: Record<string, unknown> };
+    expect([parsed.schemaVersion, 'targetLevel' in parsed.pendingAdvancement, 'xpCostToAdvance' in parsed.pendingAdvancement, 'naturalAllSixes' in parsed.pendingAdvancement]).toEqual([1, false, false, false]);
+    const restored = Character.deserialize(json);
+    expect([restored !== char, restored instanceof Character, restored.skills.every((s) => s instanceof Skill)]).toEqual([true, true, true]);
+    expect([restored.id, restored.name, restored.xp, restored.skills, restored.statuses, restored.purchasedSlots]).toEqual(['char-bob', 'Bob', 1, char.skills, [], {}]);
+    const rp = restored.pendingAdvancement!;
+    expect([rp instanceof PendingAdvancement, rp.rollId, rp.usedSkillId, rp.usedSkillName, rp.usedSkillLevel, rp.rawDice, rp.checkOutcome, rp.actionDescription, rp.targetLevel, rp.xpCostToAdvance, rp.naturalAllSixes])
+      .toEqual([true, char.pendingAdvancement!.rollId, skilled.skill('Athletics').id, 'Athletics', 2, [2, 6], 'failure', 'Vault wall', 3, 1, false]);
+    const claimed = restored.advance('Dodge').claim();
+    expect([claimed.createdSkill.name, claimed.createdSkill.level, claimed.createdSkill.parentSkillId, claimed.totalXpSpent, claimed.character.xp, claimed.character.pendingAdvancement])
+      .toEqual(['Dodge', 3, skilled.skill('Athletics').id, 1, 0, null]);
+
+    const noAction = Character.deserialize(bob.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character.serialize());
+    expect([noAction.pendingAdvancement?.actionDescription, noAction.pendingAdvancement?.naturalAllSixes, noAction.pendingAdvancement?.xpCostToAdvance]).toEqual([undefined, true, 0]);
+  });
+  it('CHR-BASIC-25: round-trips Character when pendingAdvancement is null and preserves working check methods', () => {
+    const original = Character.create('Bob').addSkill('Run', 2);
+    const restored = Character.deserialize(original.serialize());
+    expect([restored !== original, restored instanceof Character, restored.skills.every((s) => s instanceof Skill)]).toEqual([true, true, true]);
+    expect([restored.id, restored.name, restored.xp, restored.skills, restored.pendingAdvancement, restored.statuses, restored.purchasedSlots])
+      .toEqual([original.id, 'Bob', 0, original.skills, null, [], {}]);
+    const check = restored.makeCheck('Run').against(new StaticOpposition(3)).roll(new StubDiceRoller([2, 4]));
+    expect([check.checkResult.outcome, check.checkResult.actor.rawTotal, check.character.xp]).toEqual(['success', 6, 0]);
+  });
+  it('CHR-BASIC-26: Character.deserialize rejects malformed JSON, bad schemaVersion, and invalid or missing fields', () => {
+    const seeded = Character.create('Bob').makeCheck('Do Anything').withAction('Leap').against(new StaticOpposition(5)).roll(new StubDiceRoller([2])).character;
+    const base = JSON.parse(seeded.serialize()) as Record<string, unknown>;
+    const firstSkill = (base.skills as Record<string, unknown>[])[0]!;
+    const pa = base.pendingAdvancement as Record<string, unknown>;
+    const badPayloads: unknown[] = [
+      { ...base, schemaVersion: 99 }, { ...base, schemaVersion: undefined },
+      { ...base, id: 123 }, { ...base, id: '   ' }, { ...base, name: 123 }, { ...base, name: '   ' },
+      { ...base, xp: -1 }, { ...base, xp: 1.5 }, { ...base, xp: '0' },
+      { ...base, skills: 'bad' }, { ...base, skills: [] }, { ...base, skills: [null] },
+      { ...base, skills: [{ ...firstSkill, id: 123 }] }, { ...base, skills: [{ ...firstSkill, id: '  ' }] },
+      { ...base, skills: [{ ...firstSkill, name: 123 }] }, { ...base, skills: [{ ...firstSkill, name: '  ' }] },
+      { ...base, skills: [{ ...firstSkill, level: 0 }] }, { ...base, skills: [{ ...firstSkill, level: 1.5 }] },
+      { ...base, skills: [{ ...firstSkill, parentSkillId: 123 }] },
+      { ...base, skills: [firstSkill, { ...firstSkill, id: 'sk-dup', name: '  do anything ' }] },
+      { ...base, pendingAdvancement: 'bad' }, { ...base, pendingAdvancement: [] },
+      { ...base, pendingAdvancement: { ...pa, rollId: '  ' } }, { ...base, pendingAdvancement: { ...pa, rollId: 123 } },
+      { ...base, pendingAdvancement: { ...pa, usedSkillId: '  ' } }, { ...base, pendingAdvancement: { ...pa, usedSkillName: '  ' } },
+      { ...base, pendingAdvancement: { ...pa, usedSkillLevel: 0 } }, { ...base, pendingAdvancement: { ...pa, usedSkillLevel: 1.5 } },
+      { ...base, pendingAdvancement: { ...pa, rawDice: 'bad' } }, { ...base, pendingAdvancement: { ...pa, rawDice: [] } }, { ...base, pendingAdvancement: { ...pa, rawDice: [7] } },
+      { ...base, pendingAdvancement: { ...pa, checkOutcome: 'bogus' } }, { ...base, pendingAdvancement: { ...pa, actionDescription: 123 } },
+    ];
+    for (const raw of ['{bad', 'null', '[]', '42', '{"schemaVersion":99}', '{"schemaVersion":1,"name":""}', ...badPayloads.map((p) => JSON.stringify(p))]) {
+      expect(() => Character.deserialize(raw)).toThrow();
+    }
+  });
+});
