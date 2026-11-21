@@ -1,5 +1,5 @@
 import type { DiceRoller, DieValue } from '../dice';
-import { Check, type CheckOpposition, type CheckOutcome, type CheckResult } from '../checks';
+import { Check, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition } from '../checks';
 import type { Character } from './character';
 import { resolveId, type Skill } from './skill';
 
@@ -74,6 +74,64 @@ export class CharacterCheckBuilder {
 
   against(opposition: CheckOpposition): ReadyCharacterCheck {
     return new ReadyCharacterCheck(this.character, this.skillUsed, opposition, this.actionDescription);
+  }
+
+  againstCharacter(defender: Character, defenderSkillIdOrName: string): ReadyOpposedCharacterCheck {
+    return new ReadyOpposedCharacterCheck(
+      this.character,
+      this.skillUsed,
+      defender,
+      defender.skill(defenderSkillIdOrName),
+      this.actionDescription,
+    );
+  }
+}
+
+export class OpposedCharacterCheckOutcome {
+  constructor(
+    readonly actor: Character,
+    readonly defender: Character,
+    readonly actorSkill: Skill,
+    readonly defenderSkill: Skill,
+    readonly checkResult: CheckResult,
+  ) {
+    Object.freeze(this);
+  }
+
+  get actorXpEarned(): number { return xpForOutcome(this.checkResult.outcome); }
+  get defenderXpEarned(): number { return this.checkResult.outcome === 'success' ? 1 : 0; }
+}
+
+export class ReadyOpposedCharacterCheck {
+  constructor(
+    private readonly actor: Character,
+    private readonly actorSkill: Skill,
+    private readonly defender: Character,
+    private readonly defenderSkill: Skill,
+    private readonly actionDescription?: string,
+  ) {
+    Object.freeze(this);
+  }
+
+  roll(diceRoller: DiceRoller): OpposedCharacterCheckOutcome {
+    const checkResult = Check.withDice(this.actorSkill.level)
+      .against(new RolledOpposition(this.defenderSkill.level))
+      .resolve(diceRoller);
+    const defenderOutcome: CheckOutcome = checkResult.outcome === 'success' ? 'failure' : 'success';
+    const nextActor = this.actor.applyRoll(
+      this.actorSkill,
+      checkResult.actor.rawDice,
+      checkResult.outcome,
+      xpForOutcome(checkResult.outcome),
+      this.actionDescription,
+    );
+    const nextDefender = this.defender.applyRoll(
+      this.defenderSkill,
+      checkResult.opposition.pool!.rawDice,
+      defenderOutcome,
+      xpForOutcome(defenderOutcome),
+    );
+    return new OpposedCharacterCheckOutcome(nextActor, nextDefender, this.actorSkill, this.defenderSkill, checkResult);
   }
 }
 

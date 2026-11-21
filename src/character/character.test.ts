@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller, type DieValue } from '../dice';
 import { RolledOpposition, StaticOpposition } from '../checks';
-import { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, PendingAdvancement, ReadyCharacterCheck, Skill } from './index';
+import { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, PendingAdvancement, ReadyCharacterCheck, ReadyOpposedCharacterCheck, Skill } from './index';
 
 describe('character module — Skill, Character creation & addSkill', () => {
   it('CHR-BASIC-01: creates Character with Rule 3 defaults, custom IDs, immutable builder, and Skill props', () => {
@@ -230,5 +230,56 @@ describe('character module — advance & AdvancementOutcome', () => {
     const retried = afterRoll.advance('Baking').claim();
     expect(retried.character).not.toBe(afterRoll);
     expect([afterRoll.pendingAdvancement, retried.createdSkill.name, retried.createdSkill.level, retried.character.pendingAdvancement]).toEqual([pending, 'Baking', 2, null]);
+  });
+});
+
+describe('character module — character-vs-character opposed checks', () => {
+  it('CHR-BASIC-20: actor beating defender awards 0 XP to actor and +1 XP + pendingAdvancement to defender', () => {
+    const [alice, bob] = [Character.create('Alice'), Character.create('Bob')];
+    const [aliceStarter, bobStarter, roller] = [alice.skill(DEFAULT_STARTING_SKILL_NAME), bob.skill(DEFAULT_STARTING_SKILL_NAME), new StubDiceRoller([5, 2])];
+    const ready: ReadyOpposedCharacterCheck = alice.makeCheck('Do Anything').withAction('Disarm').againstCharacter(bob, 'do anything');
+    expect(ready).toBeInstanceOf(ReadyOpposedCharacterCheck);
+    const outcome: OpposedCharacterCheckOutcome = ready.roll(roller);
+    expect([outcome instanceof OpposedCharacterCheckOutcome, outcome.actor !== alice, outcome.defender !== bob]).toEqual([true, true, true]);
+    expect([alice.xp, alice.pendingAdvancement, bob.xp, bob.pendingAdvancement]).toEqual([0, null, 0, null]);
+    expect([outcome.checkResult.actor.rawDice, outcome.checkResult.opposition.pool?.rawDice, outcome.checkResult.opposition.total, outcome.checkResult.outcome, outcome.checkResult.margin, roller.remaining]).toEqual([[5], [2], 2, 'success', 3, 0]);
+    expect([outcome.actorSkill, outcome.defenderSkill, outcome.actorXpEarned, outcome.defenderXpEarned]).toEqual([aliceStarter, bobStarter, 0, 1]);
+    expect([outcome.actor.xp, outcome.actor.pendingAdvancement]).toEqual([0, null]);
+    const dp = outcome.defender.pendingAdvancement!;
+    expect([dp instanceof PendingAdvancement, outcome.defender.xp, dp.usedSkillId, dp.usedSkillName, dp.usedSkillLevel, dp.rawDice, dp.checkOutcome, dp.xpCostToAdvance, dp.targetLevel]).toEqual([true, 1, bobStarter.id, 'Do Anything', 1, [2], 'failure', 1, 2]);
+    expect(() => alice.makeCheck('Do Anything').againstCharacter(bob, 'Nonexistent').roll(new StubDiceRoller([3, 3]))).toThrow(/skill not found/i);
+  });
+  it('CHR-BASIC-21: actor losing to defender awards +1 XP to actor, 0 XP to defender, and rolls multi-die skill levels', () => {
+    const [alice, bob] = [Character.create('Alice'), Character.create('Bob')];
+    const outcome = alice.makeCheck('Do Anything').withAction('Tackle').againstCharacter(bob, 'Do Anything').roll(new StubDiceRoller([2, 5]));
+    expect([outcome.actor !== alice, outcome.defender !== bob, alice.xp, bob.xp]).toEqual([true, true, 0, 0]);
+    expect([outcome.checkResult.outcome, outcome.checkResult.margin, outcome.actorXpEarned, outcome.defenderXpEarned]).toEqual(['failure', -3, 1, 0]);
+    const ap = outcome.actor.pendingAdvancement!;
+    expect([outcome.actor.xp, ap.usedSkillId, ap.rawDice, ap.checkOutcome, ap.actionDescription, ap.xpCostToAdvance]).toEqual([1, alice.skill(DEFAULT_STARTING_SKILL_NAME).id, [2], 'failure', 'Tackle', 1]);
+    expect([outcome.defender.xp, outcome.defender.pendingAdvancement]).toEqual([0, null]);
+
+    const aliceBrawl = alice.addSkill('Brawl', 2);
+    const bobPending = bob.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character.addSkill('Dodge', 3);
+    const multi = aliceBrawl.makeCheck('Brawl').againstCharacter(bobPending, bobPending.skill('Dodge').id).roll(new StubDiceRoller([1, 2, 3, 4, 5]));
+    expect([multi.checkResult.actor.rawDice, multi.checkResult.opposition.pool?.rawDice, multi.actor.xp, multi.actor.pendingAdvancement, multi.defender.xp, multi.defender.pendingAdvancement, bobPending.pendingAdvancement !== null]).toEqual([[1, 2], [3, 4, 5], 1, null, 0, null, true]);
+  });
+  it('CHR-BASIC-22: Basic Rules tie (actor === defender, tiesMode fail) fails for actor (+1 XP) and awards 0 XP to defender', () => {
+    const [alice, bob] = [Character.create('Alice'), Character.create('Bob')];
+    const outcome = alice.makeCheck('Do Anything').againstCharacter(bob, 'Do Anything').roll(new StubDiceRoller([4, 4]));
+    expect([outcome.actor !== alice, outcome.defender !== bob]).toEqual([true, true]);
+    expect([outcome.checkResult.tiesMode, outcome.checkResult.outcome, outcome.checkResult.margin, outcome.actorXpEarned, outcome.defenderXpEarned]).toEqual(['fail', 'failure', 0, 1, 0]);
+    expect([outcome.actor.xp, outcome.actor.pendingAdvancement?.actionDescription, outcome.actor.pendingAdvancement?.xpCostToAdvance, outcome.defender.xp, outcome.defender.pendingAdvancement]).toEqual([1, undefined, 1, 0, null]);
+  });
+  it('CHR-BASIC-23: both actor and defender receive independent claimable pendingAdvancement when both qualify', () => {
+    const [alice, bob] = [Character.create('Alice'), Character.create('Bob')];
+    const outcome = alice.makeCheck('Do Anything').againstCharacter(bob, 'Do Anything').roll(new StubDiceRoller([2, 6]));
+    expect([outcome.actor !== alice, outcome.defender !== bob, outcome.checkResult.outcome, outcome.actorXpEarned, outcome.defenderXpEarned]).toEqual([true, true, 'failure', 1, 0]);
+    const [ap, dp] = [outcome.actor.pendingAdvancement!, outcome.defender.pendingAdvancement!];
+    expect([outcome.actor.xp, ap.xpCostToAdvance, ap.naturalAllSixes, ap.checkOutcome, outcome.defender.xp, dp.xpCostToAdvance, dp.naturalAllSixes, dp.checkOutcome]).toEqual([1, 1, false, 'failure', 0, 0, true, 'success']);
+    const [aliceAdv, bobAdv] = [outcome.actor.advance('Feint').claim(), outcome.defender.advance('Parry').claim()];
+    expect([aliceAdv.createdSkill.name, aliceAdv.createdSkill.level, aliceAdv.totalXpSpent, aliceAdv.character.xp, bobAdv.createdSkill.name, bobAdv.createdSkill.level, bobAdv.totalXpSpent, bobAdv.character.xp]).toEqual(['Feint', 2, 1, 0, 'Parry', 2, 0, 0]);
+
+    const mirror = alice.makeCheck('Do Anything').againstCharacter(bob, 'Do Anything').roll(new StubDiceRoller([6, 2]));
+    expect([mirror.actor.xp, mirror.actor.pendingAdvancement?.xpCostToAdvance, mirror.actor.pendingAdvancement?.checkOutcome, mirror.defender.xp, mirror.defender.pendingAdvancement?.xpCostToAdvance, mirror.defender.pendingAdvancement?.checkOutcome]).toEqual([0, 0, 'success', 1, 1, 'failure']);
   });
 });
