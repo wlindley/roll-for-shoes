@@ -71,12 +71,15 @@ roll_for_shoes/
 │   └── subagents.md
 ├── reference/
 │   └── rules.md                     # Canonical Roll for Shoes TTRPG rules
-├── index.html                       # Vite HTML entrypoint
+├── public/
+│   ├── manifest.webmanifest         # PWA manifest (explicit id "/", standalone, separated any/maskable icons)
+│   └── icons/                       # SVG + 192/512 PNG + 512 maskable PNG app icons
+├── index.html                       # Vite HTML entrypoint (viewport-fit=cover, dual theme-color, manifest)
 ├── package.json
 ├── tsconfig.json
-├── vite.config.ts
+├── vite.config.ts                   # Vite + Vitest config + inline pwaServiceWorkerPlugin emitting sw.js
 └── src/
-    ├── main.tsx                     # Mounts <App /> with RandomDiceRoller + LocalStorageAdapter
+    ├── main.tsx                     # Mounts <App /> and registers /sw.js in production builds
     ├── dice/
     │   ├── index.ts
     │   ├── types.ts
@@ -109,7 +112,7 @@ roll_for_shoes/
     │   └── campaign.test.ts
     └── ui/
         ├── App.tsx
-        ├── styles/
+        ├── styles.css
         └── components/
             ├── CampaignSidebar.tsx
             ├── CampaignSettingsDialog.tsx
@@ -120,7 +123,8 @@ roll_for_shoes/
             ├── AdvancementPrompt.tsx
             ├── StatusManager.tsx
             ├── SkillSlotBar.tsx
-            └── RollHistoryLog.tsx
+            ├── RollHistoryLog.tsx
+            └── InstallAppButton.tsx
 ```
 
 ---
@@ -158,6 +162,11 @@ Derived values are never persisted or stored as redundant fields alongside sourc
 - `allowSlotPurchase: boolean` is non-optional and defaults to `false`:
   - When `false`, players cannot purchase slots, any `purchasedSlots` on a character are ignored, and levels above the highest configured triangle level default to `1` slot so progression is never dead-ended.
   - When `true`, players may spend `2 * level` XP via `character.purchaseSkillSlot(level, config)` or simultaneously via `.purchasingSlot()` during advancement, and levels above the configured triangle default to `0` base slots until purchased.
+
+### 4.6 Progressive Web App (PWA) & Offline Support
+- **Web App Manifest & Icons**: `public/manifest.webmanifest` declares an explicit `"id": "/"`, `"display": "standalone"`, and separate `"purpose": "any"` (`icon.svg`, `icon-192.png`, `icon-512.png`) and `"purpose": "maskable"` (`icon-maskable-512.png`) icon entries, paired with `viewport-fit=cover` and dual light/dark `theme-color` metadata in `index.html`.
+- **Offline Precache Service Worker**: `pwaServiceWorkerPlugin` in `vite.config.ts` emits `dist/sw.js` at build time using a deterministic 32-bit FNV-1a bundle hash (`rfs-pwa-<hash>`), precaching the app shell, manifest, icons, and hashed Vite chunks. Navigation requests use network-first with cached `/index.html` fallback; same-origin static assets use cache-first; stale `rfs-pwa-*` caches are purged on `activate`. `src/main.tsx` registers `/sw.js` on `window` `load` in production builds.
+- **In-App Install Control & Standalone Layout**: `InstallAppButton` (`src/ui/components/InstallAppButton.tsx`) stays hidden in `display-mode: standalone` or when neither `navigator.install()` nor `beforeinstallprompt` is available, preserves keyboard focus via `aria-disabled="true"` while awaiting installation, clears single-use deferred prompts before calling `.prompt()`, allows retries after `AbortError`, and announces status via `role="status"`. `src/ui/styles.css` applies `env(safe-area-inset-*)` padding for edge-to-edge Android standalone display.
 
 ---
 

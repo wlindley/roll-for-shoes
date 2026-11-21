@@ -7,6 +7,7 @@ import { CampaignSettingsDialog } from './components/CampaignSettingsDialog';
 import { CampaignSidebar } from './components/CampaignSidebar';
 import { CharacterGrid } from './components/CharacterGrid';
 import { CheckRollerPanel } from './components/CheckRollerPanel';
+import { InstallAppButton } from './components/InstallAppButton';
 import { RollHistoryLog } from './components/RollHistoryLog';
 
 export type StorageMode = 'persistent' | 'memory';
@@ -57,7 +58,10 @@ export function App(props: AppProps): React.JSX.Element {
     <div className="app-shell">
       <header className="app-header">
         <h1>Roll for Shoes</h1>
-        <span className="badge">{storageMode === 'persistent' ? 'Persistent Storage' : 'In-Memory Session'}</span>
+        <div className="row">
+          <InstallAppButton />
+          <span className="badge">{storageMode === 'persistent' ? 'Persistent Storage' : 'In-Memory Session'}</span>
+        </div>
       </header>
       <CampaignSidebar
         workspace={workspace}

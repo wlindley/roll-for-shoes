@@ -7,8 +7,8 @@
    - **Hard Limit**: **<= 200 lines of code** per commit (measured across added/modified lines in `src/` production + test files and project configs, excluding `package-lock.json` and markdown documentation). Any diff exceeding 200 LOC is automatically rejected by `rfs-commit-reviewer` and must be split.
 2. **Human Review Gate (Commits 1–6 — Completed)**:
    - Commits 1 through 6 paused for user review prior to `git commit`.
-3. **Autonomous Execution (Commits 7–29)**:
-   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 29**.
+3. **Autonomous Execution (Commits 7–31)**:
+   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 31**.
 
 ### Per-Commit Workflow
 
@@ -102,3 +102,12 @@ sequenceDiagram
 | **Commit 27** | ~155 | **Skill Slots (Caps & Replace)** | `SkillSlotConfig` (`allowSlotPurchase = false` default, `purchasedSlots` ignored when `false`, L5 default `1` when `false`), `getSkillSlotSummary`, and `.replacingSkill()` in `src/character/` | `CHR-SLOT-01`..`05` | Autonomous |
 | **Commit 28** | ~155 | **Skill Slots (Purchasing & Campaign)** | `character.purchaseSkillSlot(level, config)` (`2 * level` XP), `.purchasingSlot()` on `advance()`, `purchasedSlots` serialization, and `campaign.rules.skillSlots` wiring | `CHR-SLOT-06`..`08`, `CMP-SLOT-01` | Autonomous |
 | **Commit 29** | ~155 | **Skill Slots (UI)** | `<SkillSlotBar />`, standalone slot purchase button, campaign slot config UI, and skill-replacement / buy-slot controls in `<AdvancementPrompt />` | `tsc`, `vite build` (`UI-06`) | Autonomous |
+
+---
+
+### Milestone 4: Progressive Web App & Offline Support (Commits 30–31)
+
+| Commit | Est. LOC | Scope & Capabilities | Verification | Review Mode |
+| :--- | :---: | :--- | :--- | :--- |
+| **Commit 30** | ~110 | `public/manifest.webmanifest` (`id: "/"`, `standalone`, separated `any` / `maskable` icons), `public/icons/*`, `index.html` (`viewport-fit=cover`, dual `theme-color`), `pwaServiceWorkerPlugin` in `vite.config.ts` emitting `sw.js`, and `/sw.js` registration in `src/main.tsx` | `tsc`, `vite build` (`dist/manifest.webmanifest`, `dist/sw.js`, `dist/icons/*`), `vitest` | Autonomous |
+| **Commit 31** | ~105 | `<InstallAppButton />` (`navigator.install` + `beforeinstallprompt`, standalone detection, `aria-disabled` focus preservation, `AbortError` retry, `role="status"`), `.app-header` integration in `App.tsx`, standalone `env(safe-area-inset-*)` styles in `src/ui/styles.css`, and PWA documentation | `tsc`, `vite build`, `vitest` | Autonomous |
