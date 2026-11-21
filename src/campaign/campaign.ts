@@ -1,5 +1,6 @@
 import type { CheckResult, TiesMode } from '../checks';
 import { Character } from '../character';
+import { CampaignCharacterScope } from './scopes';
 
 export interface CampaignRulesConfig {
   readonly tiesMode: TiesMode;
@@ -85,8 +86,7 @@ export class Campaign {
   }
 
   removeCharacter(idOrName: string): Campaign {
-    const target = this.findCharacter(idOrName);
-    if (!target) throw new Error(`Character not found: ${idOrName}`);
+    const target = this.requireCharacter(idOrName);
     return this.copy({ characters: this.characters.filter((c) => c.id !== target.id) });
   }
 
@@ -103,8 +103,29 @@ export class Campaign {
     return this.characters.find((c) => c.id === idOrName || c.name.toLowerCase() === normalized);
   }
 
-  private copy(patch: { readonly name?: string; readonly description?: string; readonly rules?: CampaignRulesConfig; readonly characters?: readonly Character[] }): Campaign {
+  character(idOrName: string): CampaignCharacterScope<{ readonly campaign: Campaign }> {
+    return new CampaignCharacterScope(this, this.requireCharacter(idOrName), (campaign) => Object.freeze({ campaign }));
+  }
+
+  /** @internal */
+  requireCharacter(idOrName: string): Character {
+    const target = this.findCharacter(idOrName);
+    if (!target) throw new Error(`Character not found: ${idOrName}`);
+    return target;
+  }
+
+  /** @internal */
+  recordRoll(updated: readonly Character[], entry: Omit<CampaignRollLogEntry, 'id' | 'timestamp'>): Campaign {
+    const logEntry: CampaignRollLogEntry = Object.freeze({ id: globalThis.crypto.randomUUID(), timestamp: new Date().toISOString(), ...entry });
+    const characters = this.characters.map((c) => updated.find((u) => u.id === c.id) ?? c);
+    return this.copy({ characters, rollLog: [logEntry, ...this.rollLog] });
+  }
+
+  private copy(patch: {
+    readonly name?: string; readonly description?: string; readonly rules?: CampaignRulesConfig;
+    readonly characters?: readonly Character[]; readonly rollLog?: readonly CampaignRollLogEntry[];
+  }): Campaign {
     const desc = 'description' in patch ? patch.description : this.description;
-    return new Campaign(this.id, patch.name ?? this.name, desc, this.createdAt, new Date().toISOString(), patch.rules ?? this.rules, patch.characters ?? this.characters, this.rollLog);
+    return new Campaign(this.id, patch.name ?? this.name, desc, this.createdAt, new Date().toISOString(), patch.rules ?? this.rules, patch.characters ?? this.characters, patch.rollLog ?? this.rollLog);
   }
 }
