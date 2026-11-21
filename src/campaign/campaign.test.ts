@@ -289,4 +289,21 @@ describe('campaign module — Incremental Advanced Rules (Ties)', () => {
     expect([e0.checkResult.actor.modifiers, e0.checkResult.actor.finalTotal, e0.checkResult.opposition.pool?.modifiers, e0.checkResult.opposition.total, e0.checkResult.outcome, e1.actionDescription, e1.checkResult.actor.modifiers, e1.checkResult.actor.finalTotal])
       .toEqual([[{ label: 'Clean Shoe', value: 2 }], 4, [{ label: 'Broken Nose', value: -3 }, { label: 'Guard', value: 1 }], 3, 'success', 'Strike', [{ label: 'Clean Shoe', value: 2 }, { label: 'Grip', value: 1 }], 7]);
   });
+
+  it('CMP-START-01: enforces rules.allowCustomStartingSkills on Campaign & Workspace addCharacter and round-trips JSON', () => {
+    const ada = Character.builder('Ada').withStartingSkill('Hacking', 2).withStartingSkill('Pilot', 3).build();
+    const [baseCmp, ws0] = [Campaign.create('Cyber'), Workspace.empty().createCampaign('Cyber')];
+    expect(() => baseCmp.addCharacter(ada)).toThrow(/starting skill/i);
+    expect(() => ws0.activeCampaign.addCharacter(ada)).toThrow(/starting skill/i);
+    const [cmpStd, wsStd] = [baseCmp.addCharacter(Character.create('Bob')), ws0.activeCampaign.addCharacter('Bob')];
+    const cmpCustom = baseCmp.withRules({ allowCustomStartingSkills: true }).addCharacter(ada);
+    const ws1 = Workspace.empty().createCampaign('Neon', { rules: { allowCustomStartingSkills: true } }).activeCampaign.addCharacter(ada).activeCampaign.addCharacter('Bob');
+    const wsLocked = ws1.activeCampaign.withRules({ allowCustomStartingSkills: false });
+    expect(() => wsLocked.activeCampaign.addCharacter(Character.builder('Zed').withStartingSkill('Mech', 2).build())).toThrow(/starting skill/i);
+    const rolled = ws1.activeCampaign.character('Ada').makeCheck('Hacking').against(new StaticOpposition(6)).roll(new StubDiceRoller([4, 5]));
+    const [restWs, restCmp] = [Workspace.deserialize(ws1.serialize()), Campaign.fromJson(ws1.activeCampaign.campaign.exportJson())];
+    for (const [prev, next] of [[baseCmp, cmpStd], [ws0, wsStd], [baseCmp, cmpCustom], [ws1, wsLocked], [ws1, rolled.workspace], [ws1, restWs], [ws1.activeCampaign.campaign, restCmp]] as const) expect(next).not.toBe(prev);
+    expect([baseCmp.characters, ws0.activeCampaign.campaign.characters, cmpStd.characters.length, wsStd.activeCampaign.campaign.characters.length, cmpCustom.findCharacter('Ada')?.skills.map((s) => [s.name, s.level]), rolled.outcome.checkResult.actor.rawTotal, rolled.outcome.checkResult.outcome, restWs.activeCampaign.campaign.rules.allowCustomStartingSkills, restCmp.rules.allowCustomStartingSkills, restWs.activeCampaign.campaign.findCharacter('Ada')?.skill('Hacking').level, restCmp.findCharacter('Ada')?.skill('Pilot').level])
+      .toEqual([[], [], 1, 1, [[DEFAULT_STARTING_SKILL_NAME, 1], ['Hacking', 2], ['Pilot', 3]], 9, 'success', true, true, 2, 3]);
+  });
 });

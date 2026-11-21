@@ -1,5 +1,5 @@
 import type { CheckResult, TiesMode } from '../checks';
-import { Character } from '../character';
+import { Character, DEFAULT_STARTING_SKILL_NAME } from '../character';
 import { CampaignCharacterScope } from './scopes';
 import { deserializeCampaign, exportCampaignJson } from './serialize';
 
@@ -87,6 +87,9 @@ export class Campaign {
 
   addCharacter(characterOrName: Character | string): Campaign {
     const candidate = typeof characterOrName === 'string' ? Character.create(characterOrName) : characterOrName;
+    if (!this.rules.allowCustomStartingSkills && candidate.skills.some((s) => s.name !== DEFAULT_STARTING_SKILL_NAME)) {
+      throw new Error('Custom starting skills are disabled in this campaign');
+    }
     if (this.characters.some((c) => c.id === candidate.id || c.name.toLowerCase() === candidate.name.toLowerCase())) {
       throw new Error(`Duplicate character in campaign: ${candidate.name}`);
     }

@@ -478,3 +478,26 @@ describe('character module — Status & Character Status Methods', () => {
     }
   });
 });
+
+describe('character module — Custom Starting Skills', () => {
+  it('CHR-START-01: Character.builder().withStartingSkill() adds trimmed starting skills alongside Do Anything 1 immutably', () => {
+    const b0 = Character.builder('Ada');
+    const [b1, bId] = [b0.withStartingSkill('  Hacking  ', 2), b0.withId('c-alt')];
+    const [b2, bAlt] = [b1.withStartingSkill('Pilot', 3), bId.withStartingSkill('Stealth', 1)];
+    const b3 = b2.withId('c-ada');
+    for (const [prev, next] of [[b0, b1], [b1, b2], [b2, b3], [b0, bId], [bId, bAlt]] as const) expect(next).not.toBe(prev);
+    const [plain, oneSkill, twoSkills, ada, alt, roller] = [b0.build(), b1.build(), b2.build(), b3.build(), bAlt.build(), new StubDiceRoller([4, 5])];
+    const check = ada.makeCheck('hacking').against(new StaticOpposition(6)).roll(roller);
+    expect([plain.skills.length, oneSkill.skills.length, twoSkills.skills.length, twoSkills.id !== 'c-ada', ada.id, ada.xp, ada.pendingAdvancement, Object.isFrozen(ada.skills), ada.skills.every((s) => s instanceof Skill && s.parentSkillId === undefined), ada.skills.map((s) => [s.name, s.level]), alt.id, alt.skills.map((s) => [s.name, s.level]), check.character !== ada, check.checkResult.actor.rawDice, check.checkResult.actor.rawTotal, check.checkResult.outcome, roller.remaining, Character.deserialize(ada.serialize()).skills])
+      .toEqual([1, 2, 3, true, 'c-ada', 0, null, true, true, [[DEFAULT_STARTING_SKILL_NAME, 1], ['Hacking', 2], ['Pilot', 3]], 'c-alt', [[DEFAULT_STARTING_SKILL_NAME, 1], ['Stealth', 1]], true, [4, 5], 9, 'success', 0, ada.skills]);
+  });
+  it('CHR-START-02: rejects duplicate Do Anything, duplicate custom names, blank names, and invalid levels without mutating builders', () => {
+    const b0 = Character.builder('Ada');
+    const b1 = b0.withStartingSkill('Hacking', 2);
+    expect(() => b0.withStartingSkill('do anything', 2).build()).toThrow();
+    for (const badName of ['', '   ', 'Do Anything', 'do anything', '  DO ANYTHING  ', 'Hacking', '  hacking ']) expect(() => b1.withStartingSkill(badName, 2).build()).toThrow();
+    for (const badLevel of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => b1.withStartingSkill('Pilot', badLevel).build()).toThrow(RangeError);
+    expect([b0.build().skills.map((s) => s.name), b1.build().skills.map((s) => [s.name, s.level])])
+      .toEqual([[DEFAULT_STARTING_SKILL_NAME], [[DEFAULT_STARTING_SKILL_NAME, 1], ['Hacking', 2]]]);
+  });
+});

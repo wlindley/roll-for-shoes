@@ -10,14 +10,24 @@ export class CharacterBuilder {
     private readonly factory: (id: string | undefined, name: string) => Character,
     private readonly name: string,
     private readonly id?: string,
-  ) {}
+    private readonly startingSkills: readonly (readonly [string, number])[] = [],
+  ) {
+    Object.freeze(this);
+  }
 
   withId(id: string): CharacterBuilder {
-    return new CharacterBuilder(this.factory, this.name, id);
+    return new CharacterBuilder(this.factory, this.name, id, this.startingSkills);
+  }
+
+  withStartingSkill(name: string, level: number): CharacterBuilder {
+    return new CharacterBuilder(this.factory, this.name, this.id, [...this.startingSkills, [name, level]]);
   }
 
   build(): Character {
-    return this.factory(this.id, this.name);
+    return this.startingSkills.reduce(
+      (character, [name, level]) => character.addSkill(name, level),
+      this.factory(this.id, this.name),
+    );
   }
 }
 

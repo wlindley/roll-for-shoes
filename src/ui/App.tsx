@@ -82,6 +82,7 @@ export function App(props: AppProps): React.JSX.Element {
                     Ties: {activeCampaign.rules.tiesMode === 'twist' ? 'Twist' : 'Fail'}
                   </span>
                   {activeCampaign.rules.statusesEnabled && <span className="badge">Statuses: On</span>}
+                  {activeCampaign.rules.allowCustomStartingSkills && <span className="badge">Starting Skills: Custom</span>}
                 </div>
                 <button type="button" className="btn" onClick={() => setRulesOpen(true)}>Campaign Rules</button>
               </div>
