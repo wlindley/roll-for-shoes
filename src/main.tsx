@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LocalStorageAdapter } from './campaign';
@@ -13,3 +14,9 @@ createRoot(rootElement).render(
     <App diceRoller={new RandomDiceRoller()} storageAdapter={new LocalStorageAdapter()} />
   </StrictMode>,
 );
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
