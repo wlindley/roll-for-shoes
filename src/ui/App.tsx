@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { MemoryStorageAdapter, type StorageAdapter, Workspace } from '../campaign';
 import type { DiceRoller } from '../dice';
 import { AdvancementPrompt } from './components/AdvancementPrompt';
+import { CampaignSettingsDialog } from './components/CampaignSettingsDialog';
 import { CampaignSidebar } from './components/CampaignSidebar';
 import { CharacterGrid } from './components/CharacterGrid';
 import { CheckRollerPanel } from './components/CheckRollerPanel';
@@ -24,6 +25,7 @@ export function App(props: AppProps): React.JSX.Element {
   const [loaded, setLoaded] = useState<{ readonly adapter: StorageAdapter; readonly workspace: Workspace } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedActorId, setSelectedActorId] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,13 +73,26 @@ export function App(props: AppProps): React.JSX.Element {
         ) : activeCampaign ? (
           <>
             <section className="panel stack">
-              <div className="row">
-                <h2>{activeCampaign.name}</h2>
-                <span className="badge">{activeCampaign.characters.length} characters</span>
-                <span className="badge">{activeCampaign.rollLog.length} rolls</span>
+              <div className="row-between">
+                <div className="row">
+                  <h2>{activeCampaign.name}</h2>
+                  <span className="badge">{activeCampaign.characters.length} characters</span>
+                  <span className="badge">{activeCampaign.rollLog.length} rolls</span>
+                  <span className={activeCampaign.rules.tiesMode === 'twist' ? 'badge badge-tie' : 'badge'}>
+                    Ties: {activeCampaign.rules.tiesMode === 'twist' ? 'Twist' : 'Fail'}
+                  </span>
+                </div>
+                <button type="button" className="btn" onClick={() => setRulesOpen(true)}>Campaign Rules</button>
               </div>
               {activeCampaign.description && <p className="muted">{activeCampaign.description}</p>}
             </section>
+            <CampaignSettingsDialog
+              key={activeCampaign.id}
+              workspace={workspace}
+              open={rulesOpen}
+              onClose={() => setRulesOpen(false)}
+              onChange={commitWorkspace}
+            />
             <CharacterGrid
               workspace={workspace}
               selectedActorId={effectiveActorId}

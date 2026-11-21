@@ -2,7 +2,7 @@ import type React from 'react';
 import { useId, useState } from 'react';
 import type { Workspace } from '../../campaign';
 import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome } from '../../character';
-import { RolledOpposition, StaticOpposition } from '../../checks';
+import { type CheckOutcome, DifficultyOpposition, DifficultyTier, RolledOpposition, StaticOpposition } from '../../checks';
 import type { DiceRoller, DieValue } from '../../dice';
 
 export interface CheckRollerPanelProps {
@@ -14,10 +14,28 @@ export interface CheckRollerPanelProps {
   readonly onError: (message: string) => void;
 }
 
-type OppositionMode = 'static' | 'rolled' | 'character';
+type OppositionMode = 'static' | 'rolled' | 'difficulty' | 'character';
+type DifficultyMode = 'static' | 'dynamic';
 type LatestRoll =
   | { readonly campaignId: string; readonly kind: 'vs_opposition'; readonly outcome: CharacterCheckOutcome }
   | { readonly campaignId: string; readonly kind: 'character_opposed'; readonly outcome: OpposedCharacterCheckOutcome };
+
+const DIFFICULTY_OPTIONS: readonly { readonly tier: DifficultyTier; readonly label: string }[] = [
+  { tier: DifficultyTier.Easy, label: 'Easy (1d6 / 3)' },
+  { tier: DifficultyTier.Moderate, label: 'Moderate (2d6 / 6)' },
+  { tier: DifficultyTier.Hard, label: 'Hard (3d6 / 9)' },
+  { tier: DifficultyTier.VeryHard, label: 'Very Hard (4d6 / 12)' },
+];
+
+export function outcomeBadgeClass(outcome: CheckOutcome): string {
+  if (outcome === 'success') return 'badge badge-success';
+  if (outcome === 'tie') return 'badge badge-tie';
+  return 'badge badge-failure';
+}
+
+export function outcomeLabel(outcome: CheckOutcome): string {
+  return outcome === 'tie' ? 'TIE — Twist' : outcome.toUpperCase();
+}
 
 export function DiceRow({ dice }: { readonly dice: readonly DieValue[] }): React.JSX.Element {
   return <span className="row">{dice.map((d, i) => <span key={i} className={d === 6 ? 'die die-six' : 'die'}>{d}</span>)}</span>;
@@ -33,6 +51,8 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
   const [mode, setMode] = useState<OppositionMode>('static');
   const [staticTarget, setStaticTarget] = useState('6');
   const [gmDiceCount, setGmDiceCount] = useState('2');
+  const [difficultyTier, setDifficultyTier] = useState<DifficultyTier>(DifficultyTier.Moderate);
+  const [difficultyMode, setDifficultyMode] = useState<DifficultyMode>('static');
   const [defenderId, setDefenderId] = useState('');
   const [defenderSkillId, setDefenderSkillId] = useState('');
   const [latestRoll, setLatestRoll] = useState<LatestRoll | null>(null);
@@ -68,7 +88,12 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
         onChange(res.workspace);
         setLatestRoll({ campaignId: campaign.id, kind: 'character_opposed', outcome: res.outcome });
       } else {
-        const opp = mode === 'static' ? new StaticOpposition(Number(staticTarget)) : new RolledOpposition(Number(gmDiceCount));
+        const opp =
+          mode === 'static'
+            ? new StaticOpposition(Number(staticTarget))
+            : mode === 'rolled'
+              ? new RolledOpposition(Number(gmDiceCount))
+              : new DifficultyOpposition(difficultyTier, difficultyMode);
         const res = builder.against(opp).roll(diceRoller);
         onChange(res.workspace);
         setLatestRoll({ campaignId: campaign.id, kind: 'vs_opposition', outcome: res.outcome });
@@ -105,6 +130,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
             <select id={`${baseId}-mode`} value={mode} onChange={(e) => setMode(e.target.value as OppositionMode)}>
               <option value="static">Static Target</option>
               <option value="rolled">GM Dynamic Dice</option>
+              <option value="difficulty">Difficulty Preset</option>
               <option value="character">Character Opposed</option>
             </select>
             {mode === 'static' && (
@@ -117,6 +143,19 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
               <>
                 <label htmlFor={`${baseId}-gmdice`}>GM Dice (d6)</label>
                 <input id={`${baseId}-gmdice`} type="number" min={1} step={1} value={gmDiceCount} onChange={(e) => setGmDiceCount(e.target.value)} required />
+              </>
+            )}
+            {mode === 'difficulty' && (
+              <>
+                <label htmlFor={`${baseId}-tier`}>Difficulty</label>
+                <select id={`${baseId}-tier`} value={difficultyTier} onChange={(e) => setDifficultyTier(Number(e.target.value) as DifficultyTier)}>
+                  {DIFFICULTY_OPTIONS.map((opt) => <option key={opt.tier} value={opt.tier}>{opt.label}</option>)}
+                </select>
+                <label htmlFor={`${baseId}-diffmode`}>Resolution</label>
+                <select id={`${baseId}-diffmode`} value={difficultyMode} onChange={(e) => setDifficultyMode(e.target.value as DifficultyMode)}>
+                  <option value="static">Static Target</option>
+                  <option value="dynamic">Dynamic Roll</option>
+                </select>
               </>
             )}
             {mode === 'character' && (!defender || !defenderSkill ? (
@@ -145,8 +184,15 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
                 ? `${activeRoll.outcome.character.name} — ${activeRoll.outcome.skillUsed.name}`
                 : `${activeRoll.outcome.actor.name} (${activeRoll.outcome.actorSkill.name}) vs ${activeRoll.outcome.defender.name} (${activeRoll.outcome.defenderSkill.name})`}
             </strong>
-            <span className="badge">{checkResult.outcome.toUpperCase()} (margin {checkResult.margin > 0 ? `+${checkResult.margin}` : checkResult.margin})</span>
+            <span className={outcomeBadgeClass(checkResult.outcome)}>
+              {outcomeLabel(checkResult.outcome)} (margin {checkResult.margin > 0 ? `+${checkResult.margin}` : checkResult.margin})
+            </span>
           </div>
+          {checkResult.outcome === 'tie' && (
+            <p className="twist-banner">
+              TIE — Partial Success with Twist (0 XP): Accomplish your goal barely, with an unexpected twist or minor consequence.
+            </p>
+          )}
           <div className="row">
             <span>Actor:</span>
             <DiceRow dice={checkResult.actor.rawDice} />

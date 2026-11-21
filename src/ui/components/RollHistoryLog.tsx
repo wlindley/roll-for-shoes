@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { CampaignRollLogEntry } from '../../campaign';
-import { DiceRow } from './CheckRollerPanel';
+import { DiceRow, outcomeBadgeClass, outcomeLabel } from './CheckRollerPanel';
 
 export interface RollHistoryLogProps {
   readonly entries: readonly CampaignRollLogEntry[];
@@ -26,7 +26,7 @@ export function RollHistoryLog({ entries }: RollHistoryLogProps): React.JSX.Elem
                       : `${entry.actorName} — ${entry.actorSkillName}`}
                   </strong>
                   <div className="row">
-                    <span className="badge">{checkResult.outcome.toUpperCase()} ({marginText})</span>
+                    <span className={outcomeBadgeClass(checkResult.outcome)}>{outcomeLabel(checkResult.outcome)} ({marginText})</span>
                     <time className="muted" dateTime={entry.timestamp}>
                       {new Date(entry.timestamp).toLocaleTimeString()}
                     </time>
