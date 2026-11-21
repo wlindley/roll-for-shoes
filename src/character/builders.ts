@@ -2,6 +2,7 @@ import type { DiceRoller, DieValue } from '../dice';
 import { Check, type CheckModifier, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type TiesMode } from '../checks';
 import type { Character } from './character';
 import { resolveId, type Skill } from './skill';
+import type { SkillSlotConfig } from './skill-slots';
 
 const xpForOutcome = (outcome: CheckOutcome): number => (outcome === 'failure' ? 1 : 0);
 
@@ -204,11 +205,20 @@ export class AdvancementOutcome {
 }
 
 export class CharacterAdvancementBuilder {
-  constructor(private readonly character: Character, private readonly newSkillName: string) {
-    Object.freeze(this);
+  constructor(
+    private readonly character: Character, private readonly newSkillName: string,
+    private readonly slotConfig: SkillSlotConfig | null = null, private readonly replaceSkillIdOrName?: string,
+  ) { Object.freeze(this); }
+
+  withSlotConfig(slotConfig: SkillSlotConfig | null): CharacterAdvancementBuilder {
+    return new CharacterAdvancementBuilder(this.character, this.newSkillName, slotConfig, this.replaceSkillIdOrName);
+  }
+
+  replacingSkill(skillIdOrName: string): CharacterAdvancementBuilder {
+    return new CharacterAdvancementBuilder(this.character, this.newSkillName, this.slotConfig, skillIdOrName);
   }
 
   claim(): AdvancementOutcome {
-    return this.character.claimAdvancement(this.newSkillName);
+    return this.character.claimAdvancement(this.newSkillName, this.slotConfig, this.replaceSkillIdOrName);
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller, type DieValue } from '../dice';
 import { RolledOpposition, StaticOpposition } from '../checks';
-import { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, OpposedParticipantBuilder, PendingAdvancement, ReadyCharacterCheck, ReadyOpposedCharacterCheck, Skill, Status } from './index';
+import { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, OpposedParticipantBuilder, PendingAdvancement, ReadyCharacterCheck, ReadyOpposedCharacterCheck, Skill, SkillSlotConfig, SkillSlotSummary, Status } from './index';
 
 describe('character module — Skill, Character creation & addSkill', () => {
   it('CHR-BASIC-01: creates Character with Rule 3 defaults, custom IDs, immutable builder, and Skill props', () => {
@@ -499,5 +499,70 @@ describe('character module — Custom Starting Skills', () => {
     for (const badLevel of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => b1.withStartingSkill('Pilot', badLevel).build()).toThrow(RangeError);
     expect([b0.build().skills.map((s) => s.name), b1.build().skills.map((s) => [s.name, s.level])])
       .toEqual([[DEFAULT_STARTING_SKILL_NAME], [[DEFAULT_STARTING_SKILL_NAME, 1], ['Hacking', 2]]]);
+  });
+});
+
+describe('character module — SkillSlotConfig, Slot Caps & Skill Replacement', () => {
+  it('CHR-SLOT-01: configures SkillSlotConfig defaults (allowSlotPurchase=false, L1 null, L5 1 vs 0) and validates inputs', () => {
+    const [tri, triFalse, triBuy] = [SkillSlotConfig.triangle(), SkillSlotConfig.triangle({ allowSlotPurchase: false }), SkillSlotConfig.triangle({ allowSlotPurchase: true })];
+    const rawLimits: Record<number, number> = { 2: 2, 3: 0 };
+    const [custom, emptyCfg] = [new SkillSlotConfig({ limitsByLevel: rawLimits, defaultSlotsAboveMax: 3 }), new SkillSlotConfig({ limitsByLevel: {} })];
+    rawLimits[2] = 99;
+    expect([tri instanceof SkillSlotConfig, Object.isFrozen(tri), Object.isFrozen(tri.limitsByLevel), tri.limitsByLevel, tri.allowSlotPurchase, tri.defaultSlotsAboveMax, triFalse.allowSlotPurchase, triFalse.defaultSlotsAboveMax, [1, 2, 3, 4, 5].map((l) => tri.baseLimitForLevel(l)), triBuy.allowSlotPurchase, triBuy.defaultSlotsAboveMax, [1, 2, 5].map((l) => triBuy.baseLimitForLevel(l)), custom.limitsByLevel, custom.allowSlotPurchase, custom.defaultSlotsAboveMax, [1, 2, 3, 4].map((l) => custom.baseLimitForLevel(l)), emptyCfg.baseLimitForLevel(2)])
+      .toEqual([true, true, true, { 2: 4, 3: 3, 4: 2 }, false, 1, false, 1, [null, 4, 3, 2, 1], true, 0, [null, 4, 0], { 2: 2, 3: 0 }, false, 3, [null, 2, 0, 3], 1]);
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => tri.baseLimitForLevel(bad)).toThrow(RangeError);
+    for (const badLimits of [{ 1: 3 }, { 0: 2 }, { [-1]: 2 }, { 2.5: 2 }, { 2: -1 }, { 2: 1.5 }, { 2: Number.NaN }] as readonly Record<number, number>[]) expect(() => new SkillSlotConfig({ limitsByLevel: badLimits })).toThrow(RangeError);
+    for (const badAbove of [-1, 1.5, Number.NaN]) expect(() => new SkillSlotConfig({ limitsByLevel: { 2: 2 }, defaultSlotsAboveMax: badAbove })).toThrow(RangeError);
+  });
+  it('CHR-SLOT-02: fills Level 2 up to cap (4/4) via withSlotConfig and computes SkillSlotSummary getters', () => {
+    const [tri, roller] = [SkillSlotConfig.triangle(), new StubDiceRoller([6, 6, 6, 6])];
+    let char = Character.create('Bob');
+    const [sUnres, sNull, sL1, s0] = [char.getSkillSlotSummary(2), char.getSkillSlotSummary(2, null), char.getSkillSlotSummary(1, tri), char.getSkillSlotSummary(2, tri)];
+    const rolled1 = char.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(roller).character;
+    const [b0, b1] = [rolled1.advance('S1'), rolled1.advance('S1').withSlotConfig(tri)];
+    expect([b1 !== b0, b1.withSlotConfig(null) !== b1, sUnres instanceof SkillSlotSummary, Object.isFrozen(sUnres)]).toEqual([true, true, true, true]);
+    char = b1.claim().character;
+    const s1 = char.getSkillSlotSummary(2, tri);
+    for (const name of ['S2', 'S3', 'S4']) char = char.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(roller).character.advance(name).withSlotConfig(tri).claim().character;
+    const [s4, s4Null, sL3] = [char.getSkillSlotSummary(2, tri), char.getSkillSlotSummary(2, null), char.getSkillSlotSummary(3, tri)];
+    expect([[sUnres.maxSlots, sUnres.usedSlots, sUnres.availableSlots, sUnres.nextSlotXpCost], [sNull.maxSlots, sNull.availableSlots], [sL1.level, sL1.maxSlots, sL1.usedSlots, sL1.availableSlots, sL1.nextSlotXpCost], [s0.maxSlots, s0.usedSlots, s0.availableSlots], [s1.usedSlots, s1.availableSlots], [s4.level, s4.maxSlots, s4.usedSlots, s4.effectivePurchasedSlots, s4.availableSlots, s4.nextSlotXpCost], [s4Null.maxSlots, s4Null.usedSlots, s4Null.availableSlots], [sL3.maxSlots, sL3.availableSlots, sL3.nextSlotXpCost], roller.remaining])
+      .toEqual([[null, 0, null, 4], [null, null], [1, null, 1, null, 2], [4, 0, 4], [1, 3], [2, 4, 4, 0, 0, 4], [null, 4, null], [3, 3, 6], 0]);
+    for (const bad of [0, -1, 1.5, Number.NaN]) expect(() => char.getSkillSlotSummary(bad, tri)).toThrow(RangeError);
+  });
+  it('CHR-SLOT-03: rejects advancement and addSkill into a full level without replacement while keeping pendingAdvancement intact', () => {
+    const [tri, triBuy] = [SkillSlotConfig.triangle(), SkillSlotConfig.triangle({ allowSlotPurchase: true })];
+    const full = Character.builder('Bob').withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).build().addSkill('S4', 2, { slotConfig: tri });
+    const ready = full.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character;
+    const [pending, l5Ready] = [ready.pendingAdvancement, full.addSkill('Master', 4).makeCheck('Master').against(new StaticOpposition(3)).roll(new StubDiceRoller([6, 6, 6, 6])).character];
+    for (const fn of [() => ready.advance('S5').withSlotConfig(tri).claim(), () => full.addSkill('S5', 2, { slotConfig: tri }), () => full.addSkill('Apex', 5, { slotConfig: triBuy }), () => l5Ready.advance('Apex').withSlotConfig(triBuy).claim()]) expect(fn).toThrow(/slot/i);
+    const [unresAdv, unresAdd, l1Add, l5Once] = [ready.advance('S5').withSlotConfig(null).claim(), full.addSkill('S5', 2, { slotConfig: null }), full.addSkill('Jog', 1, { slotConfig: tri }), full.addSkill('Apex', 5, { slotConfig: tri })];
+    expect(() => l5Once.addSkill('Apex2', 5, { slotConfig: tri })).toThrow(/slot/i);
+    expect([pending !== null, ready.pendingAdvancement, l5Ready.pendingAdvancement !== null, unresAdv.createdSkill.name, unresAdd.skills.length, l1Add.skills.length, l5Once.skill('Apex').level]).toEqual([true, pending, true, 'S5', 6, 6, 5]);
+  });
+  it('CHR-SLOT-04: replaces same-level skills via replacingSkill / addSkill and rejects Do Anything, wrong-level, unknown, or duplicate names', () => {
+    const tri = SkillSlotConfig.triangle();
+    const full = Character.builder('Bob').withStartingSkill('Jog', 1).withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).withStartingSkill('S4', 2).withStartingSkill('Climb', 3).build();
+    const [s1, s2, ready] = [full.skill('S1'), full.skill('S2'), full.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character];
+    const [pending, b0] = [ready.pendingAdvancement, ready.advance('Parkour').withSlotConfig(tri)];
+    const b1 = b0.replacingSkill('  s2  ');
+    expect(b1).not.toBe(b0);
+    expect(() => b0.claim()).toThrow(/slot/i);
+    for (const [n, t] of [['Vault', 'Do Anything'], ['Vault', '  DO ANYTHING '], ['Vault', 'Jog'], ['Vault', 'Climb'], ['Vault', 'Ghost'], ['Vault', '   '], ['S1', 'S2'], ['  ', 'S2']] as const) expect(() => ready.advance(n).withSlotConfig(tri).replacingSkill(t).claim()).toThrow();
+    for (const [n, lvl, t] of [['Dash', 1, '  do anything '], ['Swim', 2, 'Climb'], ['Swim', 2, 'Jog'], ['Swim', 2, 'Ghost'], ['S1', 2, 'S2']] as const) expect(() => full.addSkill(n, lvl, { slotConfig: tri, replaceSkillIdOrName: t })).toThrow();
+    const [outByName, outById, viaAdd, noCfgAdd] = [b1.claim(), ready.advance('Vault').withSlotConfig(tri).replacingSkill(s1.id).claim(), full.addSkill('Swim', 2, { slotConfig: tri, replaceSkillIdOrName: s1.id }), full.addSkill('Cook', 2, { replaceSkillIdOrName: '  s2 ' })];
+    expect([ready.pendingAdvancement, outByName.character !== ready, outByName.replacedSkill, outByName.createdSkill.name, outByName.totalXpSpent, outByName.character.getSkillSlotSummary(2, tri).usedSlots, outByName.character.skills.some((s) => s.id === s2.id), outById.replacedSkill, viaAdd !== full, viaAdd.skills.some((s) => s.id === s1.id), viaAdd.skill('Swim').level, noCfgAdd.skills.some((s) => s.id === s2.id)])
+      .toEqual([pending, true, s2, 'Parkour', 0, 4, false, s1, true, false, 2, false]);
+  });
+  it('CHR-SLOT-05: ignores purchasedSlots when allowSlotPurchase is false and applies them when allowSlotPurchase is true', () => {
+    const [triFalse, triBuy, rawSlots] = [SkillSlotConfig.triangle({ allowSlotPurchase: false }), SkillSlotConfig.triangle({ allowSlotPurchase: true }), { 2: 1 } as Record<number, number>];
+    const base4 = Character.builder('Ada').withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).withStartingSkill('S4', 2).build();
+    const ada = Character.rehydrate(base4.id, base4.name, 0, base4.skills, null, [], rawSlots);
+    rawSlots[2] = 99;
+    const [sumTrue, sumTrueL3, sumFalse, sumDefault, sumNull, ready] = [ada.getSkillSlotSummary(2, triBuy), ada.getSkillSlotSummary(3, triBuy), ada.getSkillSlotSummary(2, triFalse), ada.getSkillSlotSummary(2, SkillSlotConfig.triangle()), ada.getSkillSlotSummary(2, null), ada.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character];
+    for (const fn of [() => ready.advance('S5').withSlotConfig(triFalse).claim(), () => ada.addSkill('S5', 2, { slotConfig: triFalse })]) expect(fn).toThrow(/slot/i);
+    const [replacedFalse, fifthTrue, addedTrue] = [ready.advance('S5').withSlotConfig(triFalse).replacingSkill('S1').claim(), ready.advance('S5').withSlotConfig(triBuy).claim(), ada.addSkill('S5', 2, { slotConfig: triBuy })];
+    const clamped = fifthTrue.character.getSkillSlotSummary(2, triFalse);
+    expect([Object.isFrozen(ada.purchasedSlots), ada.purchasedSlots, ada.addStatus(Status.create('A', 1)).removeStatus('A').dismissAdvancement().purchasedSlots, ready.purchasedSlots, [sumTrue.maxSlots, sumTrue.effectivePurchasedSlots, sumTrue.availableSlots], [sumTrueL3.maxSlots, sumTrueL3.effectivePurchasedSlots], [sumFalse.maxSlots, sumFalse.effectivePurchasedSlots, sumFalse.availableSlots], [sumDefault.maxSlots, sumDefault.effectivePurchasedSlots], [sumNull.maxSlots, sumNull.effectivePurchasedSlots], replacedFalse.character.purchasedSlots, fifthTrue.character.purchasedSlots, fifthTrue.character.getSkillSlotSummary(2, triBuy).availableSlots, addedTrue.skills.length, [clamped.maxSlots, clamped.usedSlots, clamped.availableSlots]])
+      .toEqual([true, { 2: 1 }, { 2: 1 }, { 2: 1 }, [5, 1, 1], [3, 0], [4, 0, 0], [4, 0], [null, 0], { 2: 1 }, { 2: 1 }, 0, 6, [4, 5, 0]]);
   });
 });
