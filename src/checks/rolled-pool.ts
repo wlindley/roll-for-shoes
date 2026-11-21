@@ -1,13 +1,13 @@
 import type { DieValue } from '../dice';
-import type { CheckModifier } from './types';
+import { freezeModifiers, type CheckModifier } from './types';
 
 export class RolledPool {
   readonly rawDice: readonly DieValue[];
   readonly modifiers: readonly CheckModifier[];
 
-  constructor(rawDice: readonly DieValue[], modifiers: readonly CheckModifier[] = []) {
+  constructor(rawDice: readonly DieValue[], modifiers?: readonly CheckModifier[]) {
     this.rawDice = Object.freeze([...rawDice]);
-    this.modifiers = Object.freeze(modifiers.map((m) => Object.freeze({ ...m })));
+    this.modifiers = freezeModifiers(modifiers);
   }
 
   get rawTotal(): number {
