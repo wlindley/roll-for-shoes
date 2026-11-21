@@ -208,17 +208,22 @@ export class CharacterAdvancementBuilder {
   constructor(
     private readonly character: Character, private readonly newSkillName: string,
     private readonly slotConfig: SkillSlotConfig | null = null, private readonly replaceSkillIdOrName?: string,
+    private readonly purchaseSlot = false,
   ) { Object.freeze(this); }
 
   withSlotConfig(slotConfig: SkillSlotConfig | null): CharacterAdvancementBuilder {
-    return new CharacterAdvancementBuilder(this.character, this.newSkillName, slotConfig, this.replaceSkillIdOrName);
+    return new CharacterAdvancementBuilder(this.character, this.newSkillName, slotConfig, this.replaceSkillIdOrName, this.purchaseSlot);
   }
 
   replacingSkill(skillIdOrName: string): CharacterAdvancementBuilder {
-    return new CharacterAdvancementBuilder(this.character, this.newSkillName, this.slotConfig, skillIdOrName);
+    return new CharacterAdvancementBuilder(this.character, this.newSkillName, this.slotConfig, skillIdOrName, this.purchaseSlot);
+  }
+
+  purchasingSlot(): CharacterAdvancementBuilder {
+    return new CharacterAdvancementBuilder(this.character, this.newSkillName, this.slotConfig, this.replaceSkillIdOrName, true);
   }
 
   claim(): AdvancementOutcome {
-    return this.character.claimAdvancement(this.newSkillName, this.slotConfig, this.replaceSkillIdOrName);
+    return this.character.claimAdvancement(this.newSkillName, this.slotConfig, this.replaceSkillIdOrName, this.purchaseSlot);
   }
 }

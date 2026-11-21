@@ -38,6 +38,7 @@ export function serializeCharacter(c: Character): string {
     xp: c.xp,
     skills: c.skills.map((s) => ({ id: s.id, name: s.name, level: s.level, parentSkillId: s.parentSkillId })),
     statuses: c.statuses.map((s) => ({ id: s.id, name: s.name, rating: s.rating, note: s.note })),
+    purchasedSlots: c.purchasedSlots,
     pendingAdvancement: pa && {
       rollId: pa.rollId,
       usedSkillId: pa.usedSkillId,
@@ -105,5 +106,10 @@ export function deserializeCharacter(serialized: string): Character {
       note: readOptionalString(item.note, 'Status note'),
     });
   });
-  return Character.rehydrate(id, name, xp, skills, parsePendingAdvancement(raw.pendingAdvancement), statuses);
+  if (!isRecord(raw.purchasedSlots)) throw new Error('Character purchasedSlots must be an object');
+  const purchasedSlots: Record<number, number> = {};
+  for (const [k, v] of Object.entries(raw.purchasedSlots)) {
+    purchasedSlots[readInt(Number(k), 2, 'purchasedSlots level')] = readInt(v, 0, 'purchasedSlots count');
+  }
+  return Character.rehydrate(id, name, xp, skills, parsePendingAdvancement(raw.pendingAdvancement), statuses, purchasedSlots);
 }

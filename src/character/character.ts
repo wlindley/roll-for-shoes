@@ -96,10 +96,11 @@ export class Character {
   status(idOrName: string): Status { return findByIdOrName(this.statuses, idOrName, 'Status'); }
 
   private copy(patch: {
-    readonly xp?: number; readonly skills?: readonly Skill[]; readonly pendingAdvancement?: PendingAdvancement | null; readonly statuses?: readonly Status[];
+    readonly xp?: number; readonly skills?: readonly Skill[]; readonly pendingAdvancement?: PendingAdvancement | null;
+    readonly statuses?: readonly Status[]; readonly purchasedSlots?: Readonly<Record<number, number>>;
   }): Character {
     const pending = patch.pendingAdvancement !== undefined ? patch.pendingAdvancement : this.pendingAdvancement;
-    return new Character(this.id, this.name, patch.xp ?? this.xp, patch.skills ?? this.skills, pending, patch.statuses ?? this.statuses, this.purchasedSlots);
+    return new Character(this.id, this.name, patch.xp ?? this.xp, patch.skills ?? this.skills, pending, patch.statuses ?? this.statuses, patch.purchasedSlots ?? this.purchasedSlots);
   }
 
   private insertSkill(name: string, level: number, options?: AddSkillOptions): { readonly skills: readonly Skill[]; readonly created: Skill; readonly replaced?: Skill } {
@@ -141,6 +142,15 @@ export class Character {
     return new SkillSlotSummary(level, base + effectivePurchasedSlots, usedSlots, effectivePurchasedSlots);
   }
 
+  purchaseSkillSlot(level: number, slotConfig: SkillSlotConfig): Character {
+    requireInt(level, 1, 'Skill level');
+    if (level === 1) throw new Error('Level 1 skill slots are unrestricted');
+    if (!slotConfig.allowSlotPurchase) throw new Error('Skill slot purchase is disabled');
+    const cost = 2 * level;
+    if (this.xp < cost) throw new Error(`Insufficient XP to purchase level ${level} slot`);
+    return this.copy({ xp: this.xp - cost, purchasedSlots: { ...this.purchasedSlots, [level]: (this.purchasedSlots[level] ?? 0) + 1 } });
+  }
+
   makeCheck(skillIdOrName: string): CharacterCheckBuilder {
     return new CharacterCheckBuilder(this, this.skill(skillIdOrName));
   }
@@ -158,14 +168,20 @@ export class Character {
   }
 
   /** @internal */
-  claimAdvancement(newSkillName: string, slotConfig?: SkillSlotConfig | null, replaceSkillIdOrName?: string): AdvancementOutcome {
+  claimAdvancement(newSkillName: string, slotConfig: SkillSlotConfig | null, replaceSkillIdOrName: string | undefined, purchaseSlot: boolean): AdvancementOutcome {
     const pending = this.pendingAdvancement;
     if (!pending) throw new Error('No pending advancement to claim');
-    const { skills, created, replaced } = this.insertSkill(newSkillName, pending.targetLevel, {
+    let base: Character = this;
+    if (purchaseSlot) {
+      if (!slotConfig) throw new Error('SkillSlotConfig is required to purchase a slot');
+      base = this.purchaseSkillSlot(pending.targetLevel, slotConfig);
+    }
+    if (base.xp < pending.xpCostToAdvance) throw new Error('Insufficient XP to claim advancement');
+    const { skills, created, replaced } = base.insertSkill(newSkillName, pending.targetLevel, {
       parentSkillId: pending.usedSkillId, slotConfig, replaceSkillIdOrName,
     });
-    const next = this.copy({ xp: this.xp - pending.xpCostToAdvance, skills, pendingAdvancement: null });
-    return new AdvancementOutcome(next, created, pending.xpCostToAdvance, 0, replaced);
+    const next = base.copy({ xp: base.xp - pending.xpCostToAdvance, skills, pendingAdvancement: null });
+    return new AdvancementOutcome(next, created, pending.xpCostToAdvance, purchaseSlot ? 2 * pending.targetLevel : 0, replaced);
   }
 
   /** @internal */

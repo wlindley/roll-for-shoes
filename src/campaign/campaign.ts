@@ -1,5 +1,5 @@
 import type { CheckResult, TiesMode } from '../checks';
-import { Character, DEFAULT_STARTING_SKILL_NAME } from '../character';
+import { Character, DEFAULT_STARTING_SKILL_NAME, type SkillSlotConfig } from '../character';
 import { CampaignCharacterScope } from './scopes';
 import { deserializeCampaign, exportCampaignJson } from './serialize';
 
@@ -7,7 +7,7 @@ export interface CampaignRulesConfig {
   readonly tiesMode: TiesMode;
   readonly statusesEnabled: boolean;
   readonly allowCustomStartingSkills: boolean;
-  readonly skillSlots: null;
+  readonly skillSlots: SkillSlotConfig | null;
 }
 
 export const BASIC_CAMPAIGN_RULES: CampaignRulesConfig = Object.freeze({

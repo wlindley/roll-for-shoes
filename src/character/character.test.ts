@@ -565,4 +565,35 @@ describe('character module — SkillSlotConfig, Slot Caps & Skill Replacement', 
     expect([Object.isFrozen(ada.purchasedSlots), ada.purchasedSlots, ada.addStatus(Status.create('A', 1)).removeStatus('A').dismissAdvancement().purchasedSlots, ready.purchasedSlots, [sumTrue.maxSlots, sumTrue.effectivePurchasedSlots, sumTrue.availableSlots], [sumTrueL3.maxSlots, sumTrueL3.effectivePurchasedSlots], [sumFalse.maxSlots, sumFalse.effectivePurchasedSlots, sumFalse.availableSlots], [sumDefault.maxSlots, sumDefault.effectivePurchasedSlots], [sumNull.maxSlots, sumNull.effectivePurchasedSlots], replacedFalse.character.purchasedSlots, fifthTrue.character.purchasedSlots, fifthTrue.character.getSkillSlotSummary(2, triBuy).availableSlots, addedTrue.skills.length, [clamped.maxSlots, clamped.usedSlots, clamped.availableSlots]])
       .toEqual([true, { 2: 1 }, { 2: 1 }, { 2: 1 }, [5, 1, 1], [3, 0], [4, 0, 0], [4, 0], [null, 0], { 2: 1 }, { 2: 1 }, 0, 6, [4, 5, 0]]);
   });
+  const bankXp = (c: Character, n: number): Character => { for (let i = 0; i < n; i++) c = c.makeCheck('Do Anything').against(new StaticOpposition(7)).roll(new StubDiceRoller([1])).character; return c.dismissAdvancement(); };
+  it('CHR-SLOT-06: standalone purchaseSkillSlot spends 2 * level XP immutably, accumulates slots, and validates rules', () => {
+    const [triFalse, triBuy] = [SkillSlotConfig.triangle({ allowSlotPurchase: false }), SkillSlotConfig.triangle({ allowSlotPurchase: true })];
+    const seed = Character.builder('Bob').withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).withStartingSkill('S4', 2).build().addStatus(Status.create('Focus', 1));
+    const [c6, c4Pending] = [bankXp(seed, 6), bankXp(seed, 3).makeCheck('Do Anything').against(new StaticOpposition(7)).roll(new StubDiceRoller([1])).character];
+    const bought = c6.purchaseSkillSlot(2, triBuy);
+    const [multi, unlocked] = [bankXp(bought, 8).purchaseSkillSlot(2, triBuy).purchaseSkillSlot(3, triBuy), bought.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character.advance('S5').withSlotConfig(triBuy).claim()];
+    expect([bought !== c6, c6.xp, c6.purchasedSlots, bought.xp, Object.isFrozen(bought.purchasedSlots), bought.purchasedSlots, bought.statuses, bought.getSkillSlotSummary(2, triBuy).maxSlots, unlocked.character.xp, unlocked.character.getSkillSlotSummary(2, triBuy).usedSlots, multi.xp, multi.purchasedSlots, multi.getSkillSlotSummary(2, triBuy).maxSlots, multi.getSkillSlotSummary(3, triBuy).maxSlots])
+      .toEqual([true, 6, {}, 2, true, { 2: 1 }, seed.statuses, 5, 2, 5, 0, { 2: 2, 3: 1 }, 6, 4]);
+    for (const fn of [() => c6.purchaseSkillSlot(2, triFalse), () => c6.purchaseSkillSlot(1, triBuy), () => bought.purchaseSkillSlot(2, triBuy), () => c6.purchaseSkillSlot(4, triBuy), () => c4Pending.purchaseSkillSlot(2, triBuy).advance('Nope').claim()]) expect(fn).toThrow();
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => c6.purchaseSkillSlot(bad, triBuy)).toThrow(RangeError);
+  });
+  it('CHR-SLOT-07: simultaneous purchasingSlot() + dice XP upgrade in advance().claim() spends combined XP and validates errors', () => {
+    const [triFalse, triBuy, seed] = [SkillSlotConfig.triangle({ allowSlotPurchase: false }), SkillSlotConfig.triangle({ allowSlotPurchase: true }), Character.builder('Bob').withStartingSkill('Climb', 3).withStartingSkill('L4A', 4).withStartingSkill('L4B', 4).build()];
+    const [r9, r8] = [bankXp(seed, 9).makeCheck('Climb').against(new StaticOpposition(10)).roll(new StubDiceRoller([6, 6, 3])).character, bankXp(seed, 8).makeCheck('Climb').against(new StaticOpposition(10)).roll(new StubDiceRoller([6, 6, 3])).character];
+    const [b0, p9, p8] = [r9.advance('Mastery').withSlotConfig(triBuy), r9.pendingAdvancement, r8.pendingAdvancement];
+    const b1 = b0.purchasingSlot();
+    expect(b1).not.toBe(b0);
+    for (const fn of [() => b0.claim(), () => r9.advance('Mastery').purchasingSlot().claim(), () => r9.advance('Mastery').withSlotConfig(null).purchasingSlot().claim(), () => r9.advance('Mastery').withSlotConfig(triFalse).purchasingSlot().claim(), () => r8.advance('Mastery').withSlotConfig(triBuy).purchasingSlot().claim()]) expect(fn).toThrow();
+    const [out, rep8] = [b1.claim(), r8.advance('Mastery').withSlotConfig(triBuy).replacingSkill('L4A').claim()];
+    const natL5 = bankXp(out.character, 10).makeCheck('Mastery').against(new StaticOpposition(10)).roll(new StubDiceRoller([6, 6, 6, 6])).character.advance('Legend').withSlotConfig(triBuy).purchasingSlot().claim();
+    expect([r9.pendingAdvancement, r8.pendingAdvancement, out.character !== r9, out.createdSkill.name, out.createdSkill.level, out.replacedSkill, out.diceUpgradeXpSpent, out.slotPurchaseXpSpent, out.totalXpSpent, out.character.xp, out.character.purchasedSlots, out.character.getSkillSlotSummary(4, triBuy).usedSlots, rep8.character.xp, natL5.diceUpgradeXpSpent, natL5.slotPurchaseXpSpent, natL5.totalXpSpent, natL5.character.xp, natL5.character.purchasedSlots])
+      .toEqual([p9, p8, true, 'Mastery', 4, undefined, 1, 8, 9, 0, { 4: 1 }, 3, 7, 0, 10, 10, 0, { 4: 1, 5: 1 }]);
+  });
+  it('CHR-SLOT-08: round-trips purchasedSlots through serialize/deserialize and rejects malformed purchasedSlots payloads', () => {
+    const triBuy = SkillSlotConfig.triangle({ allowSlotPurchase: true });
+    const bought = bankXp(Character.create('Ada'), 14).purchaseSkillSlot(2, triBuy).purchaseSkillSlot(2, triBuy).purchaseSkillSlot(3, triBuy);
+    const [restored, raw] = [Character.deserialize(bought.serialize()), JSON.parse(bought.serialize()) as Record<string, unknown>];
+    expect([restored !== bought, Object.isFrozen(restored.purchasedSlots), restored.purchasedSlots, restored.getSkillSlotSummary(2, triBuy).maxSlots, restored.getSkillSlotSummary(3, triBuy).maxSlots]).toEqual([true, true, { 2: 2, 3: 1 }, 6, 4]);
+    for (const bad of ['bad', null, [], { 1: 1 }, { 0: 1 }, { 2: -1 }, { 2: 1.5 }, { a: 1 }, { 2: '1' }]) expect(() => Character.deserialize(JSON.stringify({ ...raw, purchasedSlots: bad }))).toThrow();
+  });
 });

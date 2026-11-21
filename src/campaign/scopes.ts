@@ -20,7 +20,7 @@ export class CampaignCharacterScope<TRoot> {
     );
   }
   advance(newSkillName: string): ScopedAdvancementBuilder<TRoot> {
-    return new ScopedAdvancementBuilder(this.campaign, this.wrap, this.character.advance(newSkillName));
+    return new ScopedAdvancementBuilder(this.campaign, this.wrap, this.character.advance(newSkillName).withSlotConfig(this.campaign.rules.skillSlots));
   }
   dismissAdvancement(): TRoot { return this.update((c) => c.dismissAdvancement()); }
 }
@@ -94,6 +94,14 @@ export class ScopedCheckBuilder<TRoot> {
 export class ScopedAdvancementBuilder<TRoot> {
   constructor(private readonly campaign: Campaign, private readonly wrap: (nextCampaign: Campaign) => TRoot, private readonly advancementBuilder: CharacterAdvancementBuilder) {
     Object.freeze(this);
+  }
+
+  replacingSkill(skillIdOrName: string): ScopedAdvancementBuilder<TRoot> {
+    return new ScopedAdvancementBuilder(this.campaign, this.wrap, this.advancementBuilder.replacingSkill(skillIdOrName));
+  }
+
+  purchasingSlot(): ScopedAdvancementBuilder<TRoot> {
+    return new ScopedAdvancementBuilder(this.campaign, this.wrap, this.advancementBuilder.purchasingSlot());
   }
 
   claim(): TRoot & { readonly advancement: AdvancementOutcome } {

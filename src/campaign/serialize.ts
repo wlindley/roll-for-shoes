@@ -1,6 +1,6 @@
 import type { DieValue } from '../dice';
 import { type CheckModifier, CheckResult, RolledPool, type TiesMode } from '../checks';
-import { Character } from '../character';
+import { Character, SkillSlotConfig } from '../character';
 import { Campaign, type CampaignRollLogEntry, requireNonBlank } from './campaign';
 import { Workspace } from './workspace';
 
@@ -37,6 +37,16 @@ const toCampaignDto = (c: Campaign) => ({
   rules: c.rules, characters: c.characters.map((ch) => JSON.parse(ch.serialize()) as unknown), rollLog: c.rollLog.map(toRollEntryDto),
 });
 
+function parseSkillSlots(raw: unknown): SkillSlotConfig | null {
+  if (raw === null) return null;
+  if (!isRecord(raw) || !isRecord(raw.limitsByLevel)) throw new Error('Invalid skillSlots config');
+  return new SkillSlotConfig({
+    limitsByLevel: raw.limitsByLevel as Record<number, number>,
+    allowSlotPurchase: Boolean(raw.allowSlotPurchase),
+    defaultSlotsAboveMax: raw.defaultSlotsAboveMax as number | undefined,
+  });
+}
+
 function fromCampaignDto(raw: unknown): Campaign {
   if (!isRecord(raw) || raw.schemaVersion !== 1) throw new Error('Invalid campaign payload');
   const [id, name, rules] = [requireNonBlank(String(raw.id), 'Campaign ID'), requireNonBlank(String(raw.name), 'Campaign name'), raw.rules as Record<string, unknown>];
@@ -46,7 +56,7 @@ function fromCampaignDto(raw: unknown): Campaign {
   const rollLog = (raw.rollLog as Record<string, unknown>[]).map(fromRollEntryDto);
   return Campaign.rehydrate(
     id, name, typeof raw.description === 'string' ? raw.description : undefined, String(raw.createdAt), String(raw.updatedAt),
-    { tiesMode: rules.tiesMode as TiesMode, statusesEnabled: Boolean(rules.statusesEnabled), allowCustomStartingSkills: Boolean(rules.allowCustomStartingSkills), skillSlots: null },
+    { tiesMode: rules.tiesMode as TiesMode, statusesEnabled: Boolean(rules.statusesEnabled), allowCustomStartingSkills: Boolean(rules.allowCustomStartingSkills), skillSlots: parseSkillSlots(rules.skillSlots) },
     characters, rollLog,
   );
 }

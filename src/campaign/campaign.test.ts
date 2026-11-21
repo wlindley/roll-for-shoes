@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller } from '../dice';
 import { CheckResult, RolledOpposition, RolledPool, StaticOpposition } from '../checks';
-import { AdvancementOutcome, Character, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, Status } from '../character';
+import { AdvancementOutcome, Character, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, OpposedCharacterCheckOutcome, SkillSlotConfig, Status } from '../character';
 import { BASIC_CAMPAIGN_RULES, Campaign, CampaignCharacterScope, type CampaignRollLogEntry, type CampaignRulesConfig, LocalStorageAdapter, MemoryStorageAdapter, ScopedAdvancementBuilder, ScopedCheckBuilder, type StorageAdapter, Workspace, WorkspaceCampaignScope } from './index';
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -305,5 +305,36 @@ describe('campaign module — Incremental Advanced Rules (Ties)', () => {
     for (const [prev, next] of [[baseCmp, cmpStd], [ws0, wsStd], [baseCmp, cmpCustom], [ws1, wsLocked], [ws1, rolled.workspace], [ws1, restWs], [ws1.activeCampaign.campaign, restCmp]] as const) expect(next).not.toBe(prev);
     expect([baseCmp.characters, ws0.activeCampaign.campaign.characters, cmpStd.characters.length, wsStd.activeCampaign.campaign.characters.length, cmpCustom.findCharacter('Ada')?.skills.map((s) => [s.name, s.level]), rolled.outcome.checkResult.actor.rawTotal, rolled.outcome.checkResult.outcome, restWs.activeCampaign.campaign.rules.allowCustomStartingSkills, restCmp.rules.allowCustomStartingSkills, restWs.activeCampaign.campaign.findCharacter('Ada')?.skill('Hacking').level, restCmp.findCharacter('Ada')?.skill('Pilot').level])
       .toEqual([[], [], 1, 1, [[DEFAULT_STARTING_SKILL_NAME, 1], ['Hacking', 2], ['Pilot', 3]], 9, 'success', true, true, 2, 3]);
+  });
+
+  it('CMP-SLOT-01: forwards campaign.rules.skillSlots on scoped advance, supports replacingSkill & purchasingSlot, and round-trips SkillSlotConfig', async () => {
+    const [triFalse, triBuy] = [SkillSlotConfig.triangle(), SkillSlotConfig.triangle({ allowSlotPurchase: true })];
+    const make4L2 = (n: string) => Character.builder(n).withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).withStartingSkill('S4', 2).build();
+    const ws0 = Workspace.empty().createCampaign('Freeform', { rules: { allowCustomStartingSkills: true, skillSlots: null } }).activeCampaign.addCharacter(make4L2('Bob'))
+      .createCampaign('Triangle', { rules: { allowCustomStartingSkills: true, skillSlots: triFalse } }).activeCampaign.addCharacter(make4L2('Ada'));
+    const freeFifth = ws0.campaign('Freeform').character('Bob').makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).workspace.campaign('Freeform').character('Bob').advance('S5').claim();
+    const rAda = ws0.activeCampaign.character('Ada').makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6]));
+    const sb0 = rAda.workspace.activeCampaign.character('Ada').advance('S5');
+    const sb1 = sb0.replacingSkill('S1');
+    expect(sb1).not.toBe(sb0);
+    for (const fn of [() => sb0.claim(), () => rAda.campaign.character('Ada').advance('S5').claim(), () => sb0.purchasingSlot().claim()]) expect(fn).toThrow();
+    const repRes = sb1.claim();
+    let wsBuy = repRes.workspace.activeCampaign.withRules({ skillSlots: triBuy });
+    for (let i = 0; i < 9; i++) wsBuy = wsBuy.activeCampaign.character('Ada').makeCheck('Do Anything').against(new StaticOpposition(7)).roll(new StubDiceRoller([1])).workspace;
+    const pb0 = wsBuy.activeCampaign.character('Ada').advance('S6');
+    const pb1 = pb0.purchasingSlot();
+    expect(pb1).not.toBe(pb0);
+    expect(() => pb0.claim()).toThrow(/slot/i);
+    const boughtAdv = pb1.claim();
+    const [boughtStandalone, mem] = [boughtAdv.workspace.activeCampaign.character('Ada').update((c) => c.purchaseSkillSlot(2, triBuy)).workspace, new MemoryStorageAdapter()];
+    await boughtStandalone.save(mem);
+    const [loadedWs, parsedCmp] = [await Workspace.load(mem), Campaign.fromJson(boughtStandalone.activeCampaign.campaign.exportJson())];
+    const [restCmp, restAda, cmpRaw] = [loadedWs.activeCampaign.campaign, loadedWs.activeCampaign.campaign.findCharacter('Ada')!, JSON.parse(boughtStandalone.activeCampaign.campaign.exportJson()) as Record<string, unknown>];
+    expect([repRes.workspace !== rAda.workspace, boughtAdv.workspace !== wsBuy, boughtStandalone !== boughtAdv.workspace, loadedWs !== boughtStandalone, freeFifth.campaign.findCharacter('Bob')?.getSkillSlotSummary(2, triFalse).usedSlots, repRes.advancement.replacedSkill?.name, boughtAdv.advancement.diceUpgradeXpSpent, boughtAdv.advancement.slotPurchaseXpSpent, boughtAdv.advancement.totalXpSpent, restCmp.rules.skillSlots instanceof SkillSlotConfig, restCmp.rules.skillSlots?.allowSlotPurchase, restCmp.rules.skillSlots?.baseLimitForLevel(2), parsedCmp.rules.skillSlots instanceof SkillSlotConfig, restAda.xp, restAda.purchasedSlots, restAda.getSkillSlotSummary(2, restCmp.rules.skillSlots).maxSlots])
+      .toEqual([true, true, true, true, 5, 'S1', 1, 4, 5, true, true, 4, true, 0, { 2: 2 }, 6]);
+    for (const badSlots of ['bad', [], { limitsByLevel: 'bad' }, { limitsByLevel: { 1: 2 } }, { limitsByLevel: { 2: -1 } }]) {
+      const badJson = JSON.stringify({ ...cmpRaw, rules: { ...(cmpRaw.rules as object), skillSlots: badSlots } });
+      for (const fn of [() => Campaign.fromJson(badJson), () => Workspace.empty().importCampaign(badJson)]) expect(fn).toThrow();
+    }
   });
 });
