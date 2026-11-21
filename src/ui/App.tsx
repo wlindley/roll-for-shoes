@@ -2,9 +2,11 @@ import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { MemoryStorageAdapter, type StorageAdapter, Workspace } from '../campaign';
 import type { DiceRoller } from '../dice';
+import { AdvancementPrompt } from './components/AdvancementPrompt';
 import { CampaignSidebar } from './components/CampaignSidebar';
 import { CharacterGrid } from './components/CharacterGrid';
 import { CheckRollerPanel } from './components/CheckRollerPanel';
+import { RollHistoryLog } from './components/RollHistoryLog';
 
 export type StorageMode = 'persistent' | 'memory';
 
@@ -91,6 +93,18 @@ export function App(props: AppProps): React.JSX.Element {
               onChange={commitWorkspace}
               onError={setError}
             />
+            {activeCampaign.characters.map((c) =>
+              c.pendingAdvancement ? (
+                <AdvancementPrompt
+                  key={c.pendingAdvancement.rollId}
+                  workspace={workspace}
+                  character={c}
+                  pending={c.pendingAdvancement}
+                  onChange={commitWorkspace}
+                />
+              ) : null,
+            )}
+            <RollHistoryLog entries={activeCampaign.rollLog} />
           </>
         ) : (
           <section className="panel stack">
