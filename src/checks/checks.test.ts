@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller, type DieValue } from '../dice';
 import {
-  Check, CheckResult, ReadyCheck, RolledOpposition, RolledPool, StaticOpposition,
+  Check, CheckResult, DifficultyOpposition, DifficultyTier, ReadyCheck, RolledOpposition, RolledPool, StaticOpposition,
   type CheckModifier, type CheckOpposition, type CheckOutcome, type OppositionResult, type TiesMode,
 } from './index';
 
@@ -132,5 +132,93 @@ describe('checks module — RolledOpposition', () => {
     expect(() => new RolledOpposition(2.5)).toThrow(RangeError);
     expect(() => new RolledOpposition(Number.NaN)).toThrow(RangeError);
     expect(() => new RolledOpposition(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+});
+
+describe('checks module — DifficultyTier, DifficultyOpposition & Ties', () => {
+  it('CHK-DIFF-01: DifficultyTier integer values equal 1, 2, 3, 4', () => {
+    expect([DifficultyTier.Easy, DifficultyTier.Moderate, DifficultyTier.Hard, DifficultyTier.VeryHard]).toEqual([1, 2, 3, 4]);
+  });
+
+  it('CHK-DIFF-02: resolves DifficultyOpposition static mode (tier * 3 default, modifiers, 0 dice)', () => {
+    const defaultEasy = new DifficultyOpposition(DifficultyTier.Easy);
+    expect([defaultEasy.tier, defaultEasy.mode, defaultEasy.modifiers, defaultEasy.label])
+      .toEqual([DifficultyTier.Easy, 'static', [], undefined]);
+    const tiers = [DifficultyTier.Easy, DifficultyTier.Moderate, DifficultyTier.Hard, DifficultyTier.VeryHard];
+    const roller = new StubDiceRoller([4, 4, 4, 4]);
+    const results = tiers.map((t) => Check.withDice(1).against(new DifficultyOpposition(t) satisfies CheckOpposition).resolve(roller));
+    expect([results.map((r) => r.opposition.total), results.map((r) => r.outcome), roller.remaining])
+      .toEqual([[3, 6, 9, 12], ['success', 'failure', 'failure', 'failure'], 0]);
+    expect(results.every((r) => r.opposition.pool === undefined && r.opposition.label === undefined)).toBe(true);
+
+    const mods: CheckModifier[] = [{ label: 'Slick', value: 2 }, { label: 'Chalk', value: -1 }];
+    const modOpp = new DifficultyOpposition(DifficultyTier.Hard, 'static', { modifiers: mods, label: 'Wet Wall' });
+    mods.push({ label: 'Extra', value: 5 });
+    expect([modOpp.tier, modOpp.mode, modOpp.label, Object.isFrozen(modOpp.modifiers), modOpp.modifiers])
+      .toEqual([DifficultyTier.Hard, 'static', 'Wet Wall', true, [{ label: 'Slick', value: 2 }, { label: 'Chalk', value: -1 }]]);
+    const modRoller = new StubDiceRoller([5]);
+    const modRes = Check.withDice(1).against(modOpp).resolve(modRoller);
+    expect([modRes.opposition.total, modRes.opposition.pool, modRes.opposition.label, modRoller.remaining])
+      .toEqual([10, undefined, 'Wet Wall', 0]);
+  });
+
+  it('CHK-DIFF-03: resolves DifficultyOpposition dynamic mode rolling 1d6..4d6', () => {
+    const hard = new DifficultyOpposition(DifficultyTier.Hard, 'dynamic', { label: 'Climb' });
+    expect([hard.tier, hard.mode, hard.label, hard.modifiers]).toEqual([DifficultyTier.Hard, 'dynamic', 'Climb', []]);
+    const hardRoller = new StubDiceRoller([5, 2, 2, 3]);
+    const hardRes = Check.withDice(1).against(hard).resolve(hardRoller);
+    expect([hardRes.opposition.pool?.rawDice, hardRes.opposition.total, hardRes.opposition.label, hardRes.outcome, hardRes.margin, hardRoller.remaining])
+      .toEqual([[2, 2, 3], 7, 'Climb', 'failure', -2, 0]);
+
+    const easyRes = Check.withDice(1).against(new DifficultyOpposition(DifficultyTier.Easy, 'dynamic')).resolve(new StubDiceRoller([4, 3]));
+    const modRes = Check.withDice(1).against(new DifficultyOpposition(DifficultyTier.Moderate, 'dynamic', { modifiers: [{ label: 'Wind', value: 1 }] })).resolve(new StubDiceRoller([4, 2, 5]));
+    const veryHardRes = Check.withDice(1).against(new DifficultyOpposition(DifficultyTier.VeryHard, 'dynamic')).resolve(new StubDiceRoller([4, 1, 2, 3, 6]));
+    expect([easyRes.opposition.pool?.rawDice, easyRes.opposition.total, easyRes.outcome]).toEqual([[3], 3, 'success']);
+    expect([modRes.opposition.pool?.rawDice, modRes.opposition.total, modRes.outcome]).toEqual([[2, 5], 8, 'failure']);
+    expect([veryHardRes.opposition.pool?.rawDice, veryHardRes.opposition.total]).toEqual([[1, 2, 3, 6], 12]);
+  });
+
+  it('CHK-TIE-01: resolves static tie with withTiesMode("twist") before and after against() immutably', () => {
+    const baseCheck = Check.withDice(2);
+    const twistCheck = baseCheck.withTiesMode('twist');
+    expect(twistCheck).not.toBe(baseCheck);
+    const beforeRes = twistCheck.against(new StaticOpposition(7)).resolve(new StubDiceRoller([3, 4]));
+    const baseCheckRes = baseCheck.against(new StaticOpposition(7)).resolve(new StubDiceRoller([3, 4]));
+    expect([beforeRes.outcome, beforeRes.margin, beforeRes.tiesMode, baseCheckRes.outcome, baseCheckRes.tiesMode])
+      .toEqual(['tie', 0, 'twist', 'failure', 'fail']);
+
+    const baseReady = baseCheck.against(new StaticOpposition(7));
+    const twistReady = baseReady.withTiesMode('twist');
+    expect(twistReady).not.toBe(baseReady);
+    const afterRes = twistReady.resolve(new StubDiceRoller([3, 4]));
+    const baseReadyRes = baseReady.resolve(new StubDiceRoller([3, 4]));
+    expect([afterRes.outcome, afterRes.margin, afterRes.tiesMode, baseReadyRes.outcome, baseReadyRes.tiesMode])
+      .toEqual(['tie', 0, 'twist', 'failure', 'fail']);
+  });
+
+  it('CHK-TIE-02: resolves dynamic difficulty tie with "twist" (Bob climbs wall: 7 vs 7)', () => {
+    const roller = new StubDiceRoller([3, 4, 2, 2, 3]);
+    const result = Check.withDice(2).against(new DifficultyOpposition(DifficultyTier.Hard, 'dynamic')).withTiesMode('twist').resolve(roller);
+    expect([result.actor.finalTotal, result.opposition.total, result.outcome, result.margin, result.tiesMode, roller.remaining])
+      .toEqual([7, 7, 'tie', 0, 'twist', 0]);
+  });
+
+  it('CHK-TIE-03: leaves strict win/loss unaffected under "twist" and supports switching back to "fail"', () => {
+    const twistCheck = Check.withDice(1).withTiesMode('twist');
+    const twistReady = twistCheck.against(new StaticOpposition(3));
+    const win = twistReady.resolve(new StubDiceRoller([5]));
+    const loss = twistReady.resolve(new StubDiceRoller([2]));
+    expect([win.outcome, win.margin, win.tiesMode, loss.outcome, loss.margin, loss.tiesMode])
+      .toEqual(['success', 2, 'twist', 'failure', -1, 'twist']);
+
+    const failCheck = twistCheck.withTiesMode('fail');
+    const failReady = twistReady.withTiesMode('fail');
+    expect(failCheck).not.toBe(twistCheck);
+    expect(failReady).not.toBe(twistReady);
+    expect([
+      failCheck.against(new StaticOpposition(3)).resolve(new StubDiceRoller([3])).outcome,
+      failReady.resolve(new StubDiceRoller([3])).outcome,
+      twistReady.resolve(new StubDiceRoller([3])).outcome,
+    ]).toEqual(['failure', 'failure', 'tie']);
   });
 });

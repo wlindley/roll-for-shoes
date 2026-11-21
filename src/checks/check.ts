@@ -20,24 +20,39 @@ export class CheckResult {
 }
 
 export class ReadyCheck {
-  constructor(private readonly diceCount: number, private readonly opposition: CheckOpposition) {}
+  constructor(
+    private readonly diceCount: number,
+    private readonly opposition: CheckOpposition,
+    private readonly tiesMode?: TiesMode,
+  ) {}
+
+  withTiesMode(tiesMode: TiesMode): ReadyCheck {
+    return new ReadyCheck(this.diceCount, this.opposition, tiesMode);
+  }
 
   resolve(diceRoller: DiceRoller): CheckResult {
     const actor = new RolledPool(diceRoller.roll(this.diceCount).dice);
     const opposition = this.opposition.resolve(diceRoller);
-    return new CheckResult(actor, opposition);
+    return new CheckResult(actor, opposition, this.tiesMode);
   }
 }
 
 export class Check {
-  private constructor(private readonly diceCount: number) {}
+  private constructor(
+    private readonly diceCount: number,
+    private readonly tiesMode?: TiesMode,
+  ) {}
 
   static withDice(diceCount: number): Check {
     assertValidDiceCount(diceCount);
     return new Check(diceCount);
   }
 
+  withTiesMode(tiesMode: TiesMode): Check {
+    return new Check(this.diceCount, tiesMode);
+  }
+
   against(opposition: CheckOpposition): ReadyCheck {
-    return new ReadyCheck(this.diceCount, opposition);
+    return new ReadyCheck(this.diceCount, opposition, this.tiesMode);
   }
 }

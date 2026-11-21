@@ -1,6 +1,6 @@
 import type { DiceRoller } from '../dice';
 import { RolledPool } from './rolled-pool';
-import { assertValidDiceCount, freezeModifiers, type CheckModifier } from './types';
+import { assertValidDiceCount, freezeModifiers, type CheckModifier, type DifficultyTier } from './types';
 
 export interface OppositionResult {
   readonly total: number;
@@ -38,6 +38,30 @@ export class RolledOpposition implements CheckOpposition {
 
   resolve(diceRoller: DiceRoller): OppositionResult {
     const pool = new RolledPool(diceRoller.roll(this.diceCount).dice, this.modifiers);
+    return Object.freeze({ total: pool.finalTotal, pool, label: this.label });
+  }
+}
+
+export class DifficultyOpposition implements CheckOpposition {
+  readonly modifiers: readonly CheckModifier[];
+  readonly label?: string;
+
+  constructor(
+    readonly tier: DifficultyTier,
+    readonly mode: 'static' | 'dynamic' = 'static',
+    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+  ) {
+    this.modifiers = freezeModifiers(options?.modifiers);
+    this.label = options?.label;
+    Object.freeze(this);
+  }
+
+  resolve(diceRoller: DiceRoller): OppositionResult {
+    if (this.mode === 'static') {
+      const modifierTotal = this.modifiers.reduce((sum, mod) => sum + mod.value, 0);
+      return Object.freeze({ total: this.tier * 3 + modifierTotal, label: this.label });
+    }
+    const pool = new RolledPool(diceRoller.roll(this.tier).dice, this.modifiers);
     return Object.freeze({ total: pool.finalTotal, pool, label: this.label });
   }
 }
