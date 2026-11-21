@@ -41,8 +41,8 @@ Cross-module imports MUST go exclusively through public `index.ts` entrypoints (
 
 ## 6. Commit Size & Review Gate Policy
 - **Commit Size Budget**: Target **~100 lines of code** per commit, with a **hard limit of <= 200 lines of code** (counting added/modified lines across `src/` production + test files and project configs, excluding `package-lock.json` and markdown docs).
-- **Human Review Gate (Commits 1–10)**: For each of **Commits 1 through 10**, complete Red -> Green -> `rfs-commit-reviewer` verification, stage the changes, then **stop and present the diff to the user for review BEFORE running `git commit`**.
-- **Autonomous Execution (Commit 11+)**: Starting at **Commit 11**, `rfs-coordinator` commits and advances autonomously once `rfs-commit-reviewer` approves each commit.
+- **Human Review Gate (Commits 1–6 — Completed)**: Commits 1 through 6 were reviewed prior to `git commit`.
+- **Autonomous Execution (Commit 7+)**: Starting at **Commit 7**, `rfs-coordinator` stages, audits via `rfs-commit-reviewer`, runs `git commit`, and advances autonomously once `rfs-commit-reviewer` approves each commit.
 
 ## 7. UI Development Best Practices
 - Before writing or updating HTML/CSS/React UI components in `src/ui/`, consult the `modern-web-guidance` skill for accessible semantic HTML, native `<dialog>`, forms, layout, and styling patterns.

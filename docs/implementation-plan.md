@@ -5,10 +5,10 @@
 1. **Commit Size Budget**:
    - **Target**: **~100 lines of code** per commit.
    - **Hard Limit**: **<= 200 lines of code** per commit (measured across added/modified lines in `src/` production + test files and project configs, excluding `package-lock.json` and markdown documentation). Any diff exceeding 200 LOC is automatically rejected by `rfs-commit-reviewer` and must be split.
-2. **Human Review Gate (Commits 1–10)**:
-   - For **Commits 1 through 10**, `rfs-coordinator` executes Red -> Green -> `rfs-commit-reviewer` pre-commit audit, stages the changes, and **pauses for user review before running `git commit`**.
-3. **Autonomous Execution (Commits 11–29)**:
-   - Starting at **Commit 11**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 29**.
+2. **Human Review Gate (Commits 1–6 — Completed)**:
+   - Commits 1 through 6 paused for user review prior to `git commit`.
+3. **Autonomous Execution (Commits 7–29)**:
+   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 29**.
 
 ### Per-Commit Workflow
 

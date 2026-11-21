@@ -9,7 +9,7 @@ Client-only TypeScript implementation of the tabletop micro-RPG **Roll for Shoes
 3. **Real Collaborators & High-Coverage TDD**: Automated Vitest boundary tests cover every public class, method, and getter across `dice`, `checks`, `character`, and `campaign`. **Only `DiceRoller` (`StubDiceRoller`) is ever stubbed across module boundaries**—all higher-level tests run against real production `checks`, `character`, and `campaign` code (including real production storage adapters).
 4. **Untested Declarative Browser UI**: `src/ui/` is a thin React + TypeScript layer that **uses** the domain modules' game rules rather than re-implementing them.
 5. **Multi-Character & Multi-Campaign Support**: Track multiple campaigns, each with its own rule settings and roster of characters displayed simultaneously in the browser workspace, backed by pluggable `StorageAdapter` implementations (`LocalStorageAdapter` + `MemoryStorageAdapter`) and JSON export/import.
-6. **Small, Review-Gated Commits**: Built in ~100-LOC TDD commits (hard limit <= 200 LOC of `src/` production + test code). **Commits 1–10** pause for human review before `git commit`; **Commits 11+** proceed autonomously.
+6. **Small, Audited Commits**: Built in ~100-LOC TDD commits (hard limit <= 200 LOC of `src/` production + test code). **Commits 1–6** paused for human review before `git commit`; **Commits 7+** proceed autonomously with mandatory `rfs-commit-reviewer` sign-off on every commit.
 
 ---
 

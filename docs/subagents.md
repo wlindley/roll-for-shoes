@@ -35,9 +35,8 @@ Where they live:
   4. **Size & Quality Audit Gate**:
      - Stage intended files (`git add`), verify changed LOC across `src/` and config files is **<= 200 LOC** (aiming for ~100 LOC; split the commit if > 200 LOC), and invoke `rfs-commit-reviewer` on the staged diff (`git diff --cached`).
      - If `rfs-commit-reviewer` returns `CHANGES_REQUESTED`, dispatch fixes to the responsible specialist and re-audit until `APPROVED`.
-  5. **Human Review Gate vs. Autonomous Commit**:
-     - **Commits 1–10**: Present the staged diff summary and `rfs-commit-reviewer` report to the user and **wait for user approval before running `git commit`**.
-     - **Commits 11–29**: Run `git commit` immediately upon `rfs-commit-reviewer` `APPROVED` and proceed to the next commit autonomously.
+  5. **Autonomous Commit Gate (Commit 7+)**:
+     - Commits 1–6 paused for human review prior to `git commit`. From **Commit 7 through Commit 29**, run `git commit` immediately upon `rfs-commit-reviewer` `APPROVED` and proceed to the next assigned commit autonomously.
 
 ---
 

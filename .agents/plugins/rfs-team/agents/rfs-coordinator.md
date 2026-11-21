@@ -30,6 +30,5 @@ Before coordinating any commit, read the relevant sections of:
 5. **Audit Gate**:
    - Stage intended files (`git add`), verify changed LOC <= 200, and invoke `rfs-commit-reviewer` to inspect `git diff --cached`.
    - If `CHANGES_REQUESTED`, route fixes to the responsible specialist, re-stage, and re-run `rfs-commit-reviewer` until `APPROVED`.
-6. **Human Review Gate vs. Autonomous Commit**:
-   - **Commits 1–10**: Once `rfs-commit-reviewer` returns `APPROVED`, **STOP before running `git commit`** and report the staged diff summary and review verdict so the user can review before committing.
-   - **Commits 11–29**: Once `rfs-commit-reviewer` returns `APPROVED`, run `git commit` immediately and proceed autonomously to the next commit.
+6. **Autonomous Commit Execution (Commit 7+)**:
+   - Once `rfs-commit-reviewer` returns `APPROVED`, run `git commit` with a clear message referencing the Commit scope and proceed autonomously through all commits assigned in your prompt.
