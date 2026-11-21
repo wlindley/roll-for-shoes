@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StubDiceRoller, type DieValue } from '../dice';
 import { RolledOpposition, StaticOpposition } from '../checks';
-import { Character, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, PendingAdvancement, ReadyCharacterCheck, Skill } from './index';
+import { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterBuilder, CharacterCheckBuilder, CharacterCheckOutcome, DEFAULT_STARTING_SKILL_NAME, PendingAdvancement, ReadyCharacterCheck, Skill } from './index';
 
 describe('character module — Skill, Character creation & addSkill', () => {
   it('CHR-BASIC-01: creates Character with Rule 3 defaults, custom IDs, immutable builder, and Skill props', () => {
@@ -151,5 +151,84 @@ describe('character module — makeCheck & PendingAdvancement lifecycle', () => 
     const dismissedAgain = dismissed.dismissAdvancement();
     expect(dismissedAgain).not.toBe(dismissed);
     expect([dismissedAgain.pendingAdvancement, dismissedAgain.xp]).toEqual([null, 1]);
+  });
+});
+
+describe('character module — advance & AdvancementOutcome', () => {
+  it('CHR-BASIC-14: natural all-6s unlocks level + 1 skill for 0 XP and clears pendingAdvancement immutably', () => {
+    const bob = Character.create('Bob');
+    const doAnything = bob.skill(DEFAULT_STARTING_SKILL_NAME);
+    const beforeClaim = bob.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character;
+    const pending = beforeClaim.pendingAdvancement;
+    const builder: CharacterAdvancementBuilder = beforeClaim.advance('Climbing');
+    expect(builder).toBeInstanceOf(CharacterAdvancementBuilder);
+    const outcome: AdvancementOutcome = builder.claim();
+    expect([outcome instanceof AdvancementOutcome, outcome.createdSkill instanceof Skill, outcome.character !== beforeClaim]).toEqual([true, true, true]);
+    expect([beforeClaim.xp, beforeClaim.skills, beforeClaim.pendingAdvancement]).toEqual([0, [doAnything], pending]);
+    expect([outcome.createdSkill.name, outcome.createdSkill.level, outcome.createdSkill.parentSkillId, outcome.replacedSkill]).toEqual(['Climbing', 2, doAnything.id, undefined]);
+    expect([outcome.diceUpgradeXpSpent, outcome.slotPurchaseXpSpent, outcome.totalXpSpent]).toEqual([0, 0, 0]);
+    expect([outcome.character.xp, outcome.character.pendingAdvancement, outcome.character.skills]).toEqual([0, null, [doAnything, outcome.createdSkill]]);
+  });
+  it('CHR-BASIC-15: natural all-6s on a failed opposed roll grants both +1 XP and 0 XP advancement', () => {
+    const bob = Character.create('Bob');
+    const doAnything = bob.skill(DEFAULT_STARTING_SKILL_NAME);
+    const check = bob.makeCheck('Do Anything').against(new RolledOpposition(2)).roll(new StubDiceRoller([6, 5, 5]));
+    expect([check.checkResult.outcome, check.xpEarned, check.character.xp, check.canAdvanceNaturally]).toEqual(['failure', 1, 1, true]);
+    const outcome = check.character.advance('Parkour').claim();
+    expect(outcome.character).not.toBe(check.character);
+    expect([check.character.xp, check.character.skills, check.character.pendingAdvancement !== null]).toEqual([1, [doAnything], true]);
+    expect([outcome.createdSkill.name, outcome.createdSkill.level, outcome.createdSkill.parentSkillId, outcome.replacedSkill]).toEqual(['Parkour', 2, doAnything.id, undefined]);
+    expect([outcome.diceUpgradeXpSpent, outcome.slotPurchaseXpSpent, outcome.totalXpSpent, outcome.character.xp, outcome.character.pendingAdvancement]).toEqual([0, 0, 0, 1, null]);
+  });
+  it('CHR-BASIC-16: immediate post-failure XP advancement spends gained 1 XP while checkResult remains failure', () => {
+    const bob = Character.create('Bob');
+    const doAnything = bob.skill(DEFAULT_STARTING_SKILL_NAME);
+    const check = bob.makeCheck('Do Anything').against(new StaticOpposition(5)).roll(new StubDiceRoller([2]));
+    expect([check.checkResult.outcome, check.xpEarned, check.character.xp, check.canAdvance]).toEqual(['failure', 1, 1, true]);
+    const outcome = check.character.advance('Sneaking').claim();
+    expect(outcome.character).not.toBe(check.character);
+    expect([check.character.xp, check.character.skills, check.character.pendingAdvancement !== null, check.checkResult.outcome]).toEqual([1, [doAnything], true, 'failure']);
+    expect([outcome.createdSkill.name, outcome.createdSkill.level, outcome.createdSkill.parentSkillId, outcome.replacedSkill]).toEqual(['Sneaking', 2, doAnything.id, undefined]);
+    expect([outcome.diceUpgradeXpSpent, outcome.slotPurchaseXpSpent, outcome.totalXpSpent, outcome.character.xp, outcome.character.pendingAdvancement, outcome.character.skill('Sneaking')]).toEqual([1, 0, 1, 0, null, outcome.createdSkill]);
+  });
+  it('CHR-BASIC-17: multi-die XP upgrade spends 1 XP per non-6 die (not pip difference) and retains leftover XP', () => {
+    const roller = new StubDiceRoller([1, 1, 2, 6, 1, 1, 1, 4, 6, 6]);
+    const base = Character.create('Bob').addSkill('Climbing', 3);
+    const climbing = base.skill('Climbing');
+    const with2Xp = base.makeCheck('Do Anything').against(new StaticOpposition(6)).roll(roller).character
+      .makeCheck('Do Anything').against(new StaticOpposition(6)).roll(roller).character;
+    const check = with2Xp.makeCheck('Climbing').against(new StaticOpposition(6)).roll(roller);
+    expect([check.checkResult.outcome, check.checkResult.actor.rawTotal, check.character.xp]).toEqual(['success', 9, 2]);
+    const outcome = check.character.advance('Free Soloing').claim();
+    expect(outcome.character).not.toBe(check.character);
+    expect([check.character.xp, check.character.pendingAdvancement !== null]).toEqual([2, true]);
+    expect([outcome.createdSkill.name, outcome.createdSkill.level, outcome.createdSkill.parentSkillId, outcome.replacedSkill]).toEqual(['Free Soloing', 4, climbing.id, undefined]);
+    expect([outcome.diceUpgradeXpSpent, outcome.slotPurchaseXpSpent, outcome.totalXpSpent, outcome.character.xp, outcome.character.pendingAdvancement]).toEqual([2, 0, 2, 0, null]);
+    const c2 = outcome.character.makeCheck('Do Anything').against(new StaticOpposition(6)).roll(roller).character
+      .makeCheck('Do Anything').against(new StaticOpposition(6)).roll(roller).character;
+    const partial = c2.makeCheck('Climbing').against(new StaticOpposition(6)).roll(roller).character.advance('Speed Climbing').claim();
+    expect([partial.diceUpgradeXpSpent, partial.totalXpSpent, partial.character.xp]).toEqual([1, 1, 1]);
+  });
+  it('CHR-BASIC-18: advance().claim() throws /no pending advancement/i when none exists or when claiming twice', () => {
+    const bob = Character.create('Bob');
+    expect(() => bob.advance('Jumping').claim()).toThrow(/no pending advancement/i);
+    const afterRoll = bob.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character;
+    expect(() => afterRoll.dismissAdvancement().advance('Jumping').claim()).toThrow(/no pending advancement/i);
+    const first = afterRoll.advance('Jumping').claim();
+    const snapshotSkills = first.character.skills;
+    expect(() => first.character.advance('Vaulting').claim()).toThrow(/no pending advancement/i);
+    expect([first.character.skills, first.character.xp, first.character.pendingAdvancement]).toEqual([snapshotSkills, 0, null]);
+  });
+  it('CHR-BASIC-19: blank or duplicate newSkillName throws and preserves pendingAdvancement for valid retry', () => {
+    const bob = Character.create('Bob').addSkill('Cooking', 2);
+    const afterRoll = bob.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character;
+    const pending = afterRoll.pendingAdvancement;
+    expect(pending).not.toBeNull();
+    for (const blank of ['', '   ']) expect(() => afterRoll.advance(blank).claim()).toThrow(/blank/i);
+    for (const dup of ['Do Anything', '  do anything  ', 'COOKING']) expect(() => afterRoll.advance(dup).claim()).toThrow(/duplicate/i);
+    expect([afterRoll.pendingAdvancement, afterRoll.skills.length]).toEqual([pending, 2]);
+    const retried = afterRoll.advance('Baking').claim();
+    expect(retried.character).not.toBe(afterRoll);
+    expect([afterRoll.pendingAdvancement, retried.createdSkill.name, retried.createdSkill.level, retried.character.pendingAdvancement]).toEqual([pending, 'Baking', 2, null]);
   });
 });

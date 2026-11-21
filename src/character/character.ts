@@ -1,6 +1,6 @@
 import type { DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
-import { CharacterCheckBuilder, PendingAdvancement } from './builders';
+import { AdvancementOutcome, CharacterAdvancementBuilder, CharacterCheckBuilder, PendingAdvancement } from './builders';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
 
 export class CharacterBuilder {
@@ -60,11 +60,16 @@ export class Character {
     return found;
   }
 
-  addSkill(name: string, level: number, options?: { readonly parentSkillId?: string }): Character {
-    const created = new Skill({ name, level, parentSkillId: options?.parentSkillId });
+  private createUniqueSkill(name: string, level: number, parentSkillId?: string): Skill {
+    const created = new Skill({ name, level, parentSkillId });
     if (this.skills.some((s) => s.name.toLowerCase() === created.name.toLowerCase())) {
       throw new Error(`Duplicate skill name: ${created.name}`);
     }
+    return created;
+  }
+
+  addSkill(name: string, level: number, options?: { readonly parentSkillId?: string }): Character {
+    const created = this.createUniqueSkill(name, level, options?.parentSkillId);
     return new Character(this.id, this.name, this.xp, [...this.skills, created], this.pendingAdvancement);
   }
 
@@ -72,8 +77,21 @@ export class Character {
     return new CharacterCheckBuilder(this, this.skill(skillIdOrName));
   }
 
+  advance(newSkillName: string): CharacterAdvancementBuilder {
+    return new CharacterAdvancementBuilder(this, newSkillName);
+  }
+
   dismissAdvancement(): Character {
     return new Character(this.id, this.name, this.xp, this.skills, null);
+  }
+
+  /** @internal */
+  claimAdvancement(newSkillName: string): AdvancementOutcome {
+    const pending = this.pendingAdvancement;
+    if (!pending) throw new Error('No pending advancement to claim');
+    const created = this.createUniqueSkill(newSkillName, pending.targetLevel, pending.usedSkillId);
+    const next = new Character(this.id, this.name, this.xp - pending.xpCostToAdvance, [...this.skills, created], null);
+    return new AdvancementOutcome(next, created, pending.xpCostToAdvance, 0);
   }
 
   /** @internal */

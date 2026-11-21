@@ -76,3 +76,29 @@ export class CharacterCheckBuilder {
     return new ReadyCharacterCheck(this.character, this.skillUsed, opposition, this.actionDescription);
   }
 }
+
+export class AdvancementOutcome {
+  constructor(
+    readonly character: Character,
+    readonly createdSkill: Skill,
+    readonly diceUpgradeXpSpent: number,
+    readonly slotPurchaseXpSpent: number,
+    readonly replacedSkill?: Skill,
+  ) {
+    Object.freeze(this);
+  }
+
+  get totalXpSpent(): number {
+    return this.diceUpgradeXpSpent + this.slotPurchaseXpSpent;
+  }
+}
+
+export class CharacterAdvancementBuilder {
+  constructor(private readonly character: Character, private readonly newSkillName: string) {
+    Object.freeze(this);
+  }
+
+  claim(): AdvancementOutcome {
+    return this.character.claimAdvancement(this.newSkillName);
+  }
+}
