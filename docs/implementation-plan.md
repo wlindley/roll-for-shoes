@@ -7,8 +7,8 @@
    - **Hard Limit**: **<= 200 lines of code** per commit (measured across added/modified lines in `src/` production + test files and project configs, excluding `package-lock.json` and markdown documentation). Any diff exceeding 200 LOC is automatically rejected by `rfs-commit-reviewer` and must be split.
 2. **Human Review Gate (Commits 1–6 — Completed)**:
    - Commits 1 through 6 paused for user review prior to `git commit`.
-3. **Autonomous Execution (Commits 7–31)**:
-   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 31**.
+3. **Autonomous Execution (Commits 7–32)**:
+   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 32**.
 
 ### Per-Commit Workflow
 
@@ -105,9 +105,10 @@ sequenceDiagram
 
 ---
 
-### Milestone 4: Progressive Web App & Offline Support (Commits 30–31)
+### Milestone 4: Progressive Web App & Offline Support (Commits 30–32)
 
 | Commit | Est. LOC | Scope & Capabilities | Verification | Review Mode |
 | :--- | :---: | :--- | :--- | :--- |
 | **Commit 30** | ~110 | `public/manifest.webmanifest` (`id: "/"`, `standalone`, separated `any` / `maskable` icons), `public/icons/*`, `index.html` (`viewport-fit=cover`, dual `theme-color`), `pwaServiceWorkerPlugin` in `vite.config.ts` emitting `sw.js`, and `/sw.js` registration in `src/main.tsx` | `tsc`, `vite build` (`dist/manifest.webmanifest`, `dist/sw.js`, `dist/icons/*`), `vitest` | Autonomous |
 | **Commit 31** | ~105 | `<InstallAppButton />` (`navigator.install` + `beforeinstallprompt`, standalone detection, `aria-disabled` focus preservation, `AbortError` retry, `role="status"`), `.app-header` integration in `App.tsx`, standalone `env(safe-area-inset-*)` styles in `src/ui/styles.css`, and PWA documentation | `tsc`, `vite build`, `vitest` | Autonomous |
+| **Commit 32** | ~65 | Subpath-safe GitHub Pages PWA config (`base: './'` and relative `./` precache/navigation fallback in `vite.config.ts`, `"id": "roll_for_shoes"` & `./` URLs in `public/manifest.webmanifest`, `./` links in `index.html`, `'./sw.js'` registration in `src/main.tsx`) and `.github/workflows/deploy-pages.yml` CI/CD workflow | `tsc`, `vite build` (`dist/index.html` & `dist/sw.js` `./assets/...`), `vitest` | Autonomous |

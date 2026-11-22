@@ -22,10 +22,10 @@ function pwaServiceWorkerPlugin(): Plugin {
         else for (const byte of entry.source) hash = Math.imul(hash ^ byte, 0x01000193);
       }
       const version = (hash >>> 0).toString(16).padStart(8, '0');
-      const bundleAssetUrls = bundleFiles.map((file) => `/${file}`);
+      const bundleAssetUrls = bundleFiles.map((file) => `./${file}`);
       const precacheUrls = [...new Set([
-        '/', '/index.html', '/manifest.webmanifest',
-        '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png',
+        './', './index.html', './manifest.webmanifest',
+        './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
         ...bundleAssetUrls,
       ])];
       const source = [
@@ -41,7 +41,7 @@ function pwaServiceWorkerPlugin(): Plugin {
         `  const { request } = event;`,
         `  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;`,
         `  if (request.mode === 'navigate') {`,
-        `    event.respondWith(fetch(request).catch(async () => (await caches.match(request)) || (await caches.match('/index.html')) || (await caches.match('/')) || Response.error()));`,
+        `    event.respondWith(fetch(request).catch(async () => (await caches.match(request)) || (await caches.match(new URL('./index.html', self.location).href)) || (await caches.match(new URL('./', self.location).href)) || Response.error()));`,
         `    return;`,
         `  }`,
         `  event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));`,
@@ -54,6 +54,7 @@ function pwaServiceWorkerPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react(), pwaServiceWorkerPlugin()],
   test: {
     include: ['src/**/*.test.ts'],
