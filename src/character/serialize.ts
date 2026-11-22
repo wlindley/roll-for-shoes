@@ -35,6 +35,7 @@ export function serializeCharacter(c: Character): string {
     schemaVersion: 1,
     id: c.id,
     name: c.name,
+    portrait: c.portrait,
     xp: c.xp,
     skills: c.skills.map((s) => ({ id: s.id, name: s.name, level: s.level, parentSkillId: s.parentSkillId })),
     statuses: c.statuses.map((s) => ({ id: s.id, name: s.name, rating: s.rating, note: s.note })),
@@ -80,6 +81,7 @@ export function deserializeCharacter(serialized: string): Character {
   if (raw.schemaVersion !== 1) throw new Error(`Unsupported schemaVersion: ${String(raw.schemaVersion)}`);
   const id = readNonBlankString(raw.id, 'Character id');
   const name = readNonBlankString(raw.name, 'Character name');
+  const portrait = raw.portrait === undefined ? undefined : readNonBlankString(raw.portrait, 'Character portrait');
   const xp = readInt(raw.xp, 0, 'Character xp');
   if (!Array.isArray(raw.skills) || raw.skills.length === 0) {
     throw new Error('Character skills must be a non-empty array');
@@ -111,5 +113,5 @@ export function deserializeCharacter(serialized: string): Character {
   for (const [k, v] of Object.entries(raw.purchasedSlots)) {
     purchasedSlots[readInt(Number(k), 2, 'purchasedSlots level')] = readInt(v, 0, 'purchasedSlots count');
   }
-  return Character.rehydrate(id, name, xp, skills, parsePendingAdvancement(raw.pendingAdvancement), statuses, purchasedSlots);
+  return Character.rehydrate(id, name, xp, skills, parsePendingAdvancement(raw.pendingAdvancement), statuses, purchasedSlots, portrait);
 }

@@ -6,28 +6,36 @@ import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from '
 import { requireInt, type SkillSlotConfig, SkillSlotSummary } from './skill-slots';
 import type { Status } from './status';
 
+const normalizePortrait = (portrait: string | null): string | undefined =>
+  portrait === null ? undefined : requireNonBlank(portrait, 'Character portrait');
+
 export class CharacterBuilder {
   constructor(
-    private readonly factory: (id: string | undefined, name: string) => Character,
+    private readonly factory: (id: string | undefined, name: string, portrait: string | undefined) => Character,
     private readonly name: string,
     private readonly id?: string,
+    private readonly portrait?: string,
     private readonly startingSkills: readonly (readonly [string, number])[] = [],
   ) {
     Object.freeze(this);
   }
 
   withId(id: string): CharacterBuilder {
-    return new CharacterBuilder(this.factory, this.name, id, this.startingSkills);
+    return new CharacterBuilder(this.factory, this.name, id, this.portrait, this.startingSkills);
+  }
+
+  withPortrait(portrait: string | null): CharacterBuilder {
+    return new CharacterBuilder(this.factory, this.name, this.id, normalizePortrait(portrait), this.startingSkills);
   }
 
   withStartingSkill(name: string, level: number): CharacterBuilder {
-    return new CharacterBuilder(this.factory, this.name, this.id, [...this.startingSkills, [name, level]]);
+    return new CharacterBuilder(this.factory, this.name, this.id, this.portrait, [...this.startingSkills, [name, level]]);
   }
 
   build(): Character {
     return this.startingSkills.reduce(
       (character, [name, level]) => character.addSkill(name, level),
-      this.factory(this.id, this.name),
+      this.factory(this.id, this.name, this.portrait),
     );
   }
 }
@@ -53,9 +61,10 @@ export class Character {
     readonly name: string,
     readonly xp: number,
     skills: readonly Skill[],
-    readonly pendingAdvancement: PendingAdvancement | null = null,
-    statuses: readonly Status[] = [],
-    purchasedSlots: Readonly<Record<number, number>> = {},
+    readonly pendingAdvancement: PendingAdvancement | null,
+    statuses: readonly Status[],
+    purchasedSlots?: Readonly<Record<number, number>>,
+    readonly portrait?: string,
   ) {
     this.skills = Object.freeze([...skills]);
     this.statuses = Object.freeze([...statuses]);
@@ -63,19 +72,25 @@ export class Character {
     Object.freeze(this);
   }
 
-  static create(name: string, options?: { readonly id?: string }): Character {
-    const builder = Character.builder(name);
-    return (options?.id !== undefined ? builder.withId(options.id) : builder).build();
+  static create(name: string, options?: { readonly id?: string; readonly portrait?: string }): Character {
+    let builder = Character.builder(name);
+    if (options?.id !== undefined) builder = builder.withId(options.id);
+    if (options?.portrait !== undefined) builder = builder.withPortrait(options.portrait);
+    return builder.build();
   }
 
   static builder(name: string): CharacterBuilder {
     return new CharacterBuilder(
-      (id, rawName) =>
+      (id, rawName, portrait) =>
         new Character(
           resolveId(id),
           requireNonBlank(rawName, 'Character name'),
           0,
           [new Skill({ name: DEFAULT_STARTING_SKILL_NAME, level: 1 })],
+          null,
+          [],
+          {},
+          portrait,
         ),
       name,
     );
@@ -86,8 +101,8 @@ export class Character {
   }
 
   /** @internal */
-  static rehydrate(id: string, name: string, xp: number, skills: readonly Skill[], pendingAdvancement: PendingAdvancement | null, statuses: readonly Status[], purchasedSlots?: Readonly<Record<number, number>>): Character {
-    return new Character(id, name, xp, skills, pendingAdvancement, statuses, purchasedSlots);
+  static rehydrate(id: string, name: string, xp: number, skills: readonly Skill[], pendingAdvancement: PendingAdvancement | null, statuses: readonly Status[], purchasedSlots?: Readonly<Record<number, number>>, portrait?: string): Character {
+    return new Character(id, name, xp, skills, pendingAdvancement, statuses, purchasedSlots, portrait);
   }
 
   skill(idOrName: string): Skill { return findByIdOrName(this.skills, idOrName, 'Skill'); }
@@ -98,9 +113,11 @@ export class Character {
   private copy(patch: {
     readonly xp?: number; readonly skills?: readonly Skill[]; readonly pendingAdvancement?: PendingAdvancement | null;
     readonly statuses?: readonly Status[]; readonly purchasedSlots?: Readonly<Record<number, number>>;
+    readonly portrait?: string | null;
   }): Character {
     const pending = patch.pendingAdvancement !== undefined ? patch.pendingAdvancement : this.pendingAdvancement;
-    return new Character(this.id, this.name, patch.xp ?? this.xp, patch.skills ?? this.skills, pending, patch.statuses ?? this.statuses, patch.purchasedSlots ?? this.purchasedSlots);
+    const portrait = patch.portrait !== undefined ? normalizePortrait(patch.portrait) : this.portrait;
+    return new Character(this.id, this.name, patch.xp ?? this.xp, patch.skills ?? this.skills, pending, patch.statuses ?? this.statuses, patch.purchasedSlots ?? this.purchasedSlots, portrait);
   }
 
   private insertSkill(name: string, level: number, options?: AddSkillOptions): { readonly skills: readonly Skill[]; readonly created: Skill; readonly replaced?: Skill } {
@@ -121,6 +138,10 @@ export class Character {
 
   addSkill(name: string, level: number, options?: AddSkillOptions): Character {
     return this.copy({ skills: this.insertSkill(name, level, options).skills });
+  }
+
+  withPortrait(portrait: string | null): Character {
+    return this.copy({ portrait });
   }
 
   addStatus(status: Status): Character {

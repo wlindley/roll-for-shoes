@@ -597,3 +597,48 @@ describe('character module — SkillSlotConfig, Slot Caps & Skill Replacement', 
     for (const bad of ['bad', null, [], { 1: 1 }, { 0: 1 }, { 2: -1 }, { 2: 1.5 }, { a: 1 }, { 2: '1' }]) expect(() => Character.deserialize(JSON.stringify({ ...raw, purchasedSlots: bad }))).toThrow();
   });
 });
+
+describe('character module — Character Portraits', () => {
+  it('CHR-PORTRAIT-01: sets, trims, chains, clears (null), and validates portraits in Character.create and CharacterBuilder', () => {
+    const [bob, eve, b0] = [Character.create('Bob'), Character.create('Eve', { id: 'c-eve', portrait: '  https://example.com/eve.png  ' }), Character.builder('Ada')];
+    const [b1, bAlt0] = [b0.withPortrait('  data:image/png;base64,abc  '), b0.withId('c-alt').withStartingSkill('Pilot', 3)];
+    const [b2, bAlt1] = [b1.withId('c-ada'), bAlt0.withPortrait('  /avatars/alt.webp  ')];
+    const b3 = b2.withStartingSkill('Hacking', 2);
+    const bCleared = b3.withPortrait(null);
+    for (const [prev, next] of [[b0, b1], [b1, b2], [b2, b3], [b3, bCleared], [bAlt0, bAlt1]] as const) expect(next).not.toBe(prev);
+    const [plain, ada, cleared, alt] = [b0.build(), b3.build(), bCleared.build(), bAlt1.build()];
+    for (const bad of ['', '   ', '\t\n']) { expect(() => Character.create('Ada', { portrait: bad })).toThrow(); expect(() => b1.withPortrait(bad)).toThrow(); }
+    expect([bob.portrait, eve.id, eve.portrait, plain.portrait, b1.build().portrait, Object.isFrozen(ada), ada.id, ada.portrait, ada.skills.map((s) => [s.name, s.level]), cleared.id, cleared.portrait, cleared.skills.map((s) => [s.name, s.level]), b3.build().portrait, bAlt0.build().portrait, alt.id, alt.portrait, alt.skills.map((s) => [s.name, s.level])])
+      .toEqual([undefined, 'c-eve', 'https://example.com/eve.png', undefined, 'data:image/png;base64,abc', true, 'c-ada', 'data:image/png;base64,abc', [[DEFAULT_STARTING_SKILL_NAME, 1], ['Hacking', 2]], 'c-ada', undefined, [[DEFAULT_STARTING_SKILL_NAME, 1], ['Hacking', 2]], 'data:image/png;base64,abc', undefined, 'c-alt', '/avatars/alt.webp', [[DEFAULT_STARTING_SKILL_NAME, 1], ['Pilot', 3]]]);
+  });
+  it('CHR-PORTRAIT-02: character.withPortrait sets, replaces, clears (null) immutably, survives transitions, and rejects blank strings', () => {
+    const [c0, triBuy, roller] = [Character.create('Bob'), SkillSlotConfig.triangle({ allowSlotPurchase: true }), new StubDiceRoller([2, 2, 2, 2, 6, 2, 5])];
+    const [cNull0, c1] = [c0.withPortrait(null), c0.withPortrait('  data:image/webp;base64,p1  ')];
+    const c2 = c1.withPortrait('  https://cdn.test/p2.png  ');
+    const [cCleared, s1] = [c2.withPortrait(null), c2.addSkill('Climb', 2)];
+    const s2 = s1.addStatus(Status.create('Focused', 1));
+    const s3 = s2.removeStatus('Focused');
+    const r1 = s3.makeCheck('Do Anything').against(new StaticOpposition(5)).roll(roller).character;
+    const d1 = r1.dismissAdvancement();
+    let banked = d1;
+    for (let i = 0; i < 3; i++) banked = banked.makeCheck('Do Anything').against(new StaticOpposition(5)).roll(roller).character;
+    const afterSix = banked.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(roller).character;
+    const claimed = afterSix.advance('Sprint').claim().character;
+    const slotted = claimed.purchaseSkillSlot(2, triBuy);
+    const opp = slotted.makeCheck('Do Anything').againstCharacter(Character.create('Eve', { portrait: ' /eve.png ' }), 'Do Anything').roll(roller);
+    for (const [prev, next] of [[c0, cNull0], [c0, c1], [c1, c2], [c2, cCleared], [c2, s1], [s1, s2], [s2, s3], [s3, r1], [r1, d1], [afterSix, claimed], [claimed, slotted], [slotted, opp.actor]] as const) expect(next).not.toBe(prev);
+    for (const bad of ['', '   ', '\n']) expect(() => c2.withPortrait(bad)).toThrow();
+    expect([Object.isFrozen(cNull0), Object.isFrozen(c1), Object.isFrozen(c2), Object.isFrozen(cCleared), c0.portrait, cNull0.portrait, c1.portrait, c2.portrait, cCleared.portrait, [s1, s2, s3, r1, d1, banked, afterSix, claimed, slotted, opp.actor].every((c) => c.portrait === 'https://cdn.test/p2.png'), opp.defender.portrait, slotted.purchasedSlots, roller.remaining])
+      .toEqual([true, true, true, true, undefined, undefined, 'data:image/webp;base64,p1', 'https://cdn.test/p2.png', undefined, true, '/eve.png', { 2: 1 }, 0]);
+  });
+  it('CHR-PORTRAIT-03: round-trips portraits via serialize/deserialize, handles omitted legacy field, trims strings, and rejects invalid payloads', () => {
+    const [ada, bob] = [Character.create('Ada', { id: 'c-ada', portrait: 'data:image/png;base64,xyz' }).addSkill('Climb', 2), Character.create('Bob')];
+    const [adaJson, bobJson] = [ada.serialize(), bob.serialize()];
+    const [adaRaw, bobRaw] = [JSON.parse(adaJson) as Record<string, unknown>, JSON.parse(bobJson) as Record<string, unknown>];
+    const { portrait: _omitted, ...legacyPayload } = adaRaw;
+    const [adaRestored, bobRestored, legacyRestored, trimmedRestored] = [Character.deserialize(adaJson), Character.deserialize(bobJson), Character.deserialize(JSON.stringify(legacyPayload)), Character.deserialize(JSON.stringify({ ...legacyPayload, portrait: '  /img/ada.png  ' }))];
+    expect([adaRestored !== ada, bobRestored !== bob, adaRaw.portrait, bobRaw.portrait, adaRestored.id, adaRestored.portrait, adaRestored.skill('Climb').level, bobRestored.portrait, legacyRestored.portrait, trimmedRestored.portrait])
+      .toEqual([true, true, 'data:image/png;base64,xyz', undefined, 'c-ada', 'data:image/png;base64,xyz', 2, undefined, undefined, '/img/ada.png']);
+    for (const bad of [null, 123, true, [], {}, '', '   ']) expect(() => Character.deserialize(JSON.stringify({ ...legacyPayload, portrait: bad }))).toThrow();
+  });
+});

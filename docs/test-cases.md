@@ -198,6 +198,14 @@ All tests use **real `src/checks`** and **`StubDiceRoller`**.
 | `CHR-SLOT-07` | Simultaneous `.purchasingSlot()` + dice XP upgrade in `.advance().claim()` | `[6, 6, 3]` | At 2/2 L4 with `9 XP`, roll L3 `[6, 6, 3]` vs `10` -> `.advance('Mastery').withSlotConfig(config).purchasingSlot().claim()` | `diceUpgradeXpSpent: 1`, `slotPurchaseXpSpent: 8`, `totalXpSpent: 9`, `character.xp === 0`, adds 3rd L4 skill. |
 | `CHR-SLOT-08` | Serialization round-trip preserves `purchasedSlots` | *(none)* | Purchase L2 slot -> `serialize()` -> `Character.deserialize()` | `purchasedSlots` preserved identically. |
 
+### 3.10 Character Portraits (`[Commit 33]`)
+
+| Case ID | Scenario | Stubbed Dice | Action | Expected Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| `CHR-PORTRAIT-01` | `Character.create` & `Character.builder().withPortrait()` (`undefined` default, trimmed non-blank string, `null` clear, blank error, builder immutability) | *(none)* | Create with/without `portrait`, chain `withPortrait` / `withId` / `withStartingSkill`, pass `null` and `''` / `'   '` | `portrait` defaults to `undefined`, trims non-blank strings, clears to `undefined` on `null`, and throws `Error` on blank strings without mutating builders. |
+| `CHR-PORTRAIT-02` | `character.withPortrait(portrait)` sets, replaces, and clears (`null`) immutably, survives state transitions, and rejects blank strings | `[2]` | Set/replace/clear `portrait`, run check/advancement/skill/status/slot updates, and pass `''` / `'   '` | Each `withPortrait` returns `next !== prev`; `portrait` persists across subsequent immutable `Character` updates; blank string throws `Error`. |
+| `CHR-PORTRAIT-03` | `serialize()` / `Character.deserialize()` round-trips with & without `portrait` (including omitted legacy field) and rejects invalid `portrait` payloads | *(none)* | Serialize/deserialize with `portrait`, without `portrait`, with legacy JSON omitting `portrait`, and with `portrait: 123` / `null` / `''` / `'   '` | Preserves/trims valid `portrait` or `undefined`; throws `Error` when `portrait` is non-undefined and non-string or blank. |
+
 ---
 
 ## 4. Campaign & Workspace Boundary Cases (`src/campaign/campaign.test.ts`)
@@ -232,6 +240,7 @@ All tests use **real `src/character`**, **real `src/checks`**, **real `MemorySto
 | `CMP-STS-01` | Commit 25 | Campaign enforces `rules.statusesEnabled` (rejecting `.withStatus()` when `false`, applying & persisting statuses when `true`) | Throws rule-disabled `Error` when `false`; modifies check & survives `LocalStorageAdapter` round-trip when `true`. |
 | `CMP-START-01` | Commit 26 | `campaign.addCharacter(customChar)` enforces `rules.allowCustomStartingSkills` | Succeeds when `true`; throws rule-disabled `Error` when `false` and character has skills beyond `Do Anything 1`. |
 | `CMP-SLOT-01` | Commit 28 | `workspace.activeCampaign.character(...).advance(...)` automatically supplies `campaign.rules.skillSlots` | Enforces 4/3/2 triangle & `allowSlotPurchase` in slot-limited campaign while leaving `skillSlots: null` campaign unrestricted. |
+| `CMP-PORTRAIT-01` | Commit 33 | `Campaign` & `Workspace` persist character portraits across `addCharacter`, `character().update(c => c.withPortrait(...))`, `LocalStorageAdapter`, and `exportJson` / `importCampaign` | Portrait sets, updates, and clears (`null`) immutably and survives `LocalStorageAdapter` save/load and campaign JSON export/import round-trips. |
 
 ---
 

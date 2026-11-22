@@ -228,9 +228,9 @@ export class ReadyCheck {
 
 ---
 
-## Module 3: Character Management (`src/character/index.ts`) — `[Commits 6–10, 21, 24, 26–28]`
+## Module 3: Character Management (`src/character/index.ts`) — `[Commits 6–10, 21, 24, 26–28, 33]`
 
-Immutable `Character` entity with member methods and fluent builders for checks, advancement, statuses, starting skills, skill slots, and serialization. Imports **only** from `src/dice` and `src/checks`.
+Immutable `Character` entity with member methods and fluent builders for checks, advancement, statuses, starting skills, skill slots, portraits, and serialization. Imports **only** from `src/dice` and `src/checks`.
 
 ```ts
 import type { DiceRoller, DieValue } from '../dice';
@@ -388,6 +388,7 @@ export class AdvancementOutcome {
 export class Character {
   readonly id: string;
   readonly name: string;
+  readonly portrait?: string;
   readonly xp: number;
   readonly skills: readonly Skill[];
   readonly statuses: readonly Status[];
@@ -395,9 +396,12 @@ export class Character {
   readonly pendingAdvancement: PendingAdvancement | null;
 
   /** Quick factory creating a character with `0 XP` and `Do Anything 1`. */
-  static create(name: string, options?: { readonly id?: string }): Character;
+  static create(
+    name: string,
+    options?: { readonly id?: string; readonly portrait?: string },
+  ): Character;
 
-  /** Fluent builder for customizing ID and optional starting skills [Commits 6, 26]. */
+  /** Fluent builder for customizing ID, portrait, and optional starting skills [Commits 6, 26, 33]. */
   static builder(name: string): CharacterBuilder;
 
   /** Validates JSON schema (`schemaVersion: 1`) and reconstructs an immutable `Character` [Commit 10]. */
@@ -434,6 +438,9 @@ export class Character {
     },
   ): Character;
 
+  /** Returns a new `Character` with trimmed non-blank `portrait`, or `undefined` when `null` (`Error` if blank) [Commit 33]. */
+  withPortrait(portrait: string | null): Character;
+
   /** Attaches a `Status` (`Status.create` or `Status.roll`) to this character [Commit 24]. */
   addStatus(status: Status): Character;
 
@@ -455,6 +462,8 @@ export class Character {
 
 export class CharacterBuilder {
   withId(id: string): CharacterBuilder;
+  /** Sets trimmed non-blank `portrait` or clears to `undefined` when `null` (`Error` if blank) [Commit 33]. */
+  withPortrait(portrait: string | null): CharacterBuilder;
   /** Adds a custom starting skill alongside `Do Anything 1` [Commit 26]. */
   withStartingSkill(name: string, level: number): CharacterBuilder;
   build(): Character;

@@ -337,4 +337,22 @@ describe('campaign module — Incremental Advanced Rules (Ties)', () => {
       for (const fn of [() => Campaign.fromJson(badJson), () => Workspace.empty().importCampaign(badJson)]) expect(fn).toThrow();
     }
   });
+
+  it('CMP-PORTRAIT-01: updates character portraits immutably in Campaign & Workspace and persists across LocalStorageAdapter and JSON export/import', async () => {
+    const [alice, cara] = [Character.create('Alice', { portrait: 'data:image/png;base64,a1' }), Character.create('Cara', { portrait: 'https://example.com/cara.jpg' })];
+    const ws0 = Workspace.empty().createCampaign('Gallery').activeCampaign.addCharacter(alice).activeCampaign.addCharacter('Bob').activeCampaign.addCharacter(cara).activeCampaign.addCharacter('Dan');
+    const rBob = ws0.activeCampaign.character('Bob').update((c) => c.withPortrait('  /bob.png  '));
+    const rCara = rBob.workspace.activeCampaign.character('Cara').update((c) => c.withPortrait(null));
+    const local = new LocalStorageAdapter();
+    await local.clear(); await rCara.workspace.save(local);
+    const loadedWs = await Workspace.load(new LocalStorageAdapter());
+    await local.clear();
+    const exported = rCara.campaign.exportJson();
+    const [fromJsonCmp, importedWs] = [Campaign.fromJson(exported), Workspace.empty().importCampaign(exported)];
+    for (const [prev, next] of [[ws0, rBob.workspace], [rBob.workspace, rCara.workspace], [rCara.workspace, loadedWs], [rCara.campaign, fromJsonCmp]] as const) expect(next).not.toBe(prev);
+    const portraitsOf = (c: Campaign) => ['Alice', 'Bob', 'Cara', 'Dan'].map((n) => c.findCharacter(n)?.portrait);
+    const expected = ['data:image/png;base64,a1', '/bob.png', undefined, undefined];
+    expect([portraitsOf(ws0.activeCampaign.campaign), portraitsOf(rCara.campaign), portraitsOf(loadedWs.activeCampaign.campaign), portraitsOf(fromJsonCmp), portraitsOf(importedWs.activeCampaign.campaign), await local.load()])
+      .toEqual([['data:image/png;base64,a1', undefined, 'https://example.com/cara.jpg', undefined], expected, expected, expected, expected, null]);
+  });
 });
