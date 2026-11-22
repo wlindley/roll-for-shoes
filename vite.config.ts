@@ -58,6 +58,7 @@ export default defineConfig({
   plugins: [react(), pwaServiceWorkerPlugin()],
   test: {
     include: ['src/**/*.test.ts'],
+    pool: 'forks',
     poolOptions: { forks: { execArgv: ['--localstorage-file=node_modules/.vitest-localstorage'] } },
     coverage: {
       provider: 'v8',
