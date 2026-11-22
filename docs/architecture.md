@@ -41,9 +41,9 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Dice** | `src/dice/` | *(none)* | Defines `DieValue` (`1..6`), `DiceRoll` (computed `total`), and `DiceRoller` (`roll(count)`). Provides `RandomDiceRoller` (cryptographic RNG with injectable byte source) and `StubDiceRoller` (deterministic FIFO queue). | **Yes** (`dice.test.ts`) |
 | **2. Checks** | `src/checks/` | `src/dice` | Fluent `Check` builder, `RolledPool` with computed getters, and polymorphic `CheckOpposition` implementations (`StaticOpposition`, `RolledOpposition`, `DifficultyOpposition`). | **Yes** (`checks.test.ts`) |
-| **3. Character** | `src/character/` | `src/dice`, `src/checks` | Immutable `Character` entity with fluent builders (`makeCheck`, `advance`, `Character.builder`), `Skill`, `Status` (`Status.create` / `Status.roll`), `SkillSlotConfig`, and versioned JSON serialization. | **Yes** (`character.test.ts`) |
+| **3. Character** | `src/character/` | `src/dice`, `src/checks` | Immutable `Character` entity with fluent builders (`makeCheck`, `advance`, `Character.builder`), `Skill`, `Status` (`Status.create` / `Status.roll`), `SkillSlotConfig`, optional `portrait`, and versioned JSON serialization. | **Yes** (`character.test.ts`) |
 | **4. Campaign & Storage** | `src/campaign/` | `src/dice`, `src/checks`, `src/character` | Immutable `Workspace` and `Campaign` entities with scoped fluent traversal (`workspace.activeCampaign.character('foo').makeCheck(...)`), roll history, campaign JSON import/export, and `StorageAdapter` (`LocalStorageAdapter` + `MemoryStorageAdapter`). | **Yes** (`campaign.test.ts`) |
-| **5. Browser UI** | `src/ui/` | `src/dice`, `src/checks`, `src/character`, `src/campaign` | React components rendering campaign management, simultaneous multi-character sheets, check builder, post-roll advancement flow, statuses, and skill slots. Wires `RandomDiceRoller` and `LocalStorageAdapter` at application boot. | **No** *(verified via `tsc` & `vite build`)* |
+| **5. Browser UI** | `src/ui/` | `src/dice`, `src/checks`, `src/character`, `src/campaign` | Responsive React components rendering campaign management (with collapsible mobile drawer), wider simultaneous multi-character cards with `64×64` portraits, check builder, post-roll advancement flow, statuses, and skill slots. Wires `RandomDiceRoller` and persistent `LocalStorageAdapter` at application boot. | **No** *(verified via `tsc` & `vite build`)* |
 
 ---
 
@@ -112,6 +112,7 @@ roll_for_shoes/
     │   └── campaign.test.ts
     └── ui/
         ├── App.tsx
+        ├── portrait-image.ts
         ├── styles.css
         └── components/
             ├── CampaignSidebar.tsx
@@ -163,10 +164,11 @@ Derived values are never persisted or stored as redundant fields alongside sourc
   - When `false`, players cannot purchase slots, any `purchasedSlots` on a character are ignored, and levels above the highest configured triangle level default to `1` slot so progression is never dead-ended.
   - When `true`, players may spend `2 * level` XP via `character.purchaseSkillSlot(level, config)` or simultaneously via `.purchasingSlot()` during advancement, and levels above the configured triangle default to `0` base slots until purchased.
 
-### 4.6 Progressive Web App (PWA) & Offline Support
-- **Web App Manifest & Icons**: `public/manifest.webmanifest` declares an explicit `"id": "/"`, `"display": "standalone"`, and separate `"purpose": "any"` (`icon.svg`, `icon-192.png`, `icon-512.png`) and `"purpose": "maskable"` (`icon-maskable-512.png`) icon entries, paired with `viewport-fit=cover` and dual light/dark `theme-color` metadata in `index.html`.
-- **Offline Precache Service Worker**: `pwaServiceWorkerPlugin` in `vite.config.ts` emits `dist/sw.js` at build time using a deterministic 32-bit FNV-1a bundle hash (`rfs-pwa-<hash>`), precaching the app shell, manifest, icons, and hashed Vite chunks. Navigation requests use network-first with cached `/index.html` fallback; same-origin static assets use cache-first; stale `rfs-pwa-*` caches are purged on `activate`. `src/main.tsx` registers `/sw.js` on `window` `load` in production builds.
-- **In-App Install Control & Standalone Layout**: `InstallAppButton` (`src/ui/components/InstallAppButton.tsx`) stays hidden in `display-mode: standalone` or when neither `navigator.install()` nor `beforeinstallprompt` is available, preserves keyboard focus via `aria-disabled="true"` while awaiting installation, clears single-use deferred prompts before calling `.prompt()`, allows retries after `AbortError`, and announces status via `role="status"`. `src/ui/styles.css` applies `env(safe-area-inset-*)` padding for edge-to-edge Android standalone display.
+### 4.6 Progressive Web App (PWA), Portraits & Responsive Layout
+- **Web App Manifest & Icons**: `public/manifest.webmanifest` declares `"id": "roll_for_shoes"`, `"display": "standalone"`, and separate `"purpose": "any"` (`icon.svg`, `icon-192.png`, `icon-512.png`) and `"purpose": "maskable"` (`icon-maskable-512.png`) icon entries, paired with `viewport-fit=cover` and dual light/dark `theme-color` metadata in `index.html`.
+- **Offline Precache Service Worker**: `pwaServiceWorkerPlugin` in `vite.config.ts` emits `dist/sw.js` at build time using a deterministic 32-bit FNV-1a bundle hash (`rfs-pwa-<hash>`), precaching relative `./` shell assets, manifest, icons, and hashed Vite chunks for root or subpath hosting. Navigation requests use network-first with cached `./index.html` fallback; same-origin static assets use cache-first; stale `rfs-pwa-*` caches are purged on `activate`. `src/main.tsx` registers `./sw.js` on `window` `load` in production builds.
+- **In-App Install Control & Standalone Layout**: `InstallAppButton` (`src/ui/components/InstallAppButton.tsx`) stays hidden in `display-mode: standalone` or when neither `navigator.install()` nor `beforeinstallprompt` is available, preserves keyboard focus via `aria-disabled="true"` while awaiting installation, clears single-use deferred prompts before calling `.prompt()`, allows retries after `AbortError`, and announces status via `role="status"`. `src/ui/styles.css` applies `env(safe-area-inset-*)` padding for edge-to-edge standalone display.
+- **Character Portraits & Responsive Breakpoints**: `Character` stores an optional non-blank `portrait?: string` persisted in `Character`, `Campaign`, and `Workspace` JSON. `src/ui/portrait-image.ts` center-crops uploaded images to `<= 256×256` WebP (with JPEG fallback) so portraits fit cleanly in `localStorage` and exported JSON backups. `src/ui/styles.css` pairs wider `minmax(min(100%, 380px), 1fr)` character cards and `64×64` avatars with a two-column `300px` sidebar shell at `>= 960px`, a collapsible `aria-expanded` campaign drawer below `960px`, and `1rem` touch-friendly controls on coarse-pointer / `<= 640px` viewports.
 
 ---
 

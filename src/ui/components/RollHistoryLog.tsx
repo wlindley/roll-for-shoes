@@ -20,7 +20,7 @@ export function RollHistoryLog({ entries }: RollHistoryLogProps): React.JSX.Elem
             return (
               <li key={entry.id} className="card stack">
                 <div className="row-between">
-                  <strong>
+                  <strong className="roll-title">
                     {entry.kind === 'character_opposed'
                       ? `${entry.actorName} (${entry.actorSkillName}) vs ${entry.defenderName} (${entry.defenderSkillName})`
                       : `${entry.actorName} — ${entry.actorSkillName}`}
@@ -34,11 +34,16 @@ export function RollHistoryLog({ entries }: RollHistoryLogProps): React.JSX.Elem
                 </div>
                 {entry.actionDescription && <p className="muted">“{entry.actionDescription}”</p>}
                 <div className="row">
-                  <DiceRow dice={checkResult.actor.rawDice} />
-                  <span className="badge">Total {checkResult.actor.finalTotal} (raw {checkResult.actor.rawTotal})</span>
-                  <span>vs</span>
-                  {checkResult.opposition.pool && <DiceRow dice={checkResult.opposition.pool.rawDice} />}
-                  <span className="badge">{checkResult.opposition.pool ? 'Opposition' : 'Target'} {checkResult.opposition.total}</span>
+                  <span className="row">
+                    <span>Actor:</span>
+                    <DiceRow dice={checkResult.actor.rawDice} />
+                    <span className="badge">Total {checkResult.actor.finalTotal} (raw {checkResult.actor.rawTotal})</span>
+                  </span>
+                  <span className="row">
+                    <span>vs</span>
+                    {checkResult.opposition.pool && <DiceRow dice={checkResult.opposition.pool.rawDice} />}
+                    <span className="badge">{checkResult.opposition.pool ? 'Opposition' : 'Target'} {checkResult.opposition.total}</span>
+                  </span>
                   <span className="muted">
                     {entry.kind === 'character_opposed'
                       ? `XP: ${entry.actorName} +${entry.actorXpEarned}, ${entry.defenderName} +${entry.defenderXpEarned ?? 0}`

@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import { MemoryStorageAdapter, type StorageAdapter, Workspace } from '../campaign';
+import { type StorageAdapter, Workspace } from '../campaign';
 import type { DiceRoller } from '../dice';
 import { AdvancementPrompt } from './components/AdvancementPrompt';
 import { CampaignSettingsDialog } from './components/CampaignSettingsDialog';
@@ -10,8 +10,6 @@ import { CheckRollerPanel } from './components/CheckRollerPanel';
 import { InstallAppButton } from './components/InstallAppButton';
 import { RollHistoryLog } from './components/RollHistoryLog';
 
-export type StorageMode = 'persistent' | 'memory';
-
 export interface AppProps {
   readonly diceRoller: DiceRoller;
   readonly storageAdapter: StorageAdapter;
@@ -20,9 +18,6 @@ export interface AppProps {
 const toErrorMessage = (err: unknown, fallback: string): string => (err instanceof Error ? err.message : fallback);
 
 export function App(props: AppProps): React.JSX.Element {
-  const [storageMode, setStorageMode] = useState<StorageMode>('persistent');
-  const [memoryAdapter] = useState(() => new MemoryStorageAdapter());
-  const activeAdapter = storageMode === 'persistent' ? props.storageAdapter : memoryAdapter;
   const [loaded, setLoaded] = useState<{ readonly adapter: StorageAdapter; readonly workspace: Workspace } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedActorId, setSelectedActorId] = useState<string | null>(null);
@@ -31,24 +26,24 @@ export function App(props: AppProps): React.JSX.Element {
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    Workspace.load(activeAdapter)
-      .then((ws) => { if (!cancelled) setLoaded({ adapter: activeAdapter, workspace: ws }); })
+    Workspace.load(props.storageAdapter)
+      .then((ws) => { if (!cancelled) setLoaded({ adapter: props.storageAdapter, workspace: ws }); })
       .catch((err: unknown) => {
         if (!cancelled) {
           setError(toErrorMessage(err, 'Failed to load workspace.'));
-          setLoaded({ adapter: activeAdapter, workspace: Workspace.empty() });
+          setLoaded({ adapter: props.storageAdapter, workspace: Workspace.empty() });
         }
       });
     return () => { cancelled = true; };
-  }, [activeAdapter]);
+  }, [props.storageAdapter]);
 
   const commitWorkspace = useCallback((next: Workspace) => {
     setError(null);
-    setLoaded({ adapter: activeAdapter, workspace: next });
-    void next.save(activeAdapter).catch((err: unknown) => setError(toErrorMessage(err, 'Failed to save workspace.')));
-  }, [activeAdapter]);
+    setLoaded({ adapter: props.storageAdapter, workspace: next });
+    void next.save(props.storageAdapter).catch((err: unknown) => setError(toErrorMessage(err, 'Failed to save workspace.')));
+  }, [props.storageAdapter]);
 
-  const workspace = loaded?.adapter === activeAdapter ? loaded.workspace : null;
+  const workspace = loaded?.adapter === props.storageAdapter ? loaded.workspace : null;
   const activeCampaign = workspace?.tryGetActiveCampaign() ?? null;
   const effectiveActorId = activeCampaign?.characters.some((c) => c.id === selectedActorId)
     ? selectedActorId
@@ -60,16 +55,9 @@ export function App(props: AppProps): React.JSX.Element {
         <h1>Roll for Shoes</h1>
         <div className="row">
           <InstallAppButton />
-          <span className="badge">{storageMode === 'persistent' ? 'Persistent Storage' : 'In-Memory Session'}</span>
         </div>
       </header>
-      <CampaignSidebar
-        workspace={workspace}
-        storageMode={storageMode}
-        onToggleStorageMode={() => setStorageMode((m) => (m === 'persistent' ? 'memory' : 'persistent'))}
-        onChange={commitWorkspace}
-        onError={setError}
-      />
+      <CampaignSidebar workspace={workspace} onChange={commitWorkspace} onError={setError} />
       <main className="main-stage">
         {error && <div className="error-banner" role="alert">{error}</div>}
         {!workspace ? (

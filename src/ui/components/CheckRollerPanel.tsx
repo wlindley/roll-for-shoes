@@ -127,7 +127,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       <div className="row" role="group" aria-label={label}>
         <span className="muted">{label}:</span>
         {statuses.map((s) => (
-          <label key={s.id} className="row">
+          <label key={s.id} className="field-inline">
             <input type="checkbox" checked={selectedStatusIds.includes(s.id)} onChange={() => toggleStatus(s.id)} />
             {s.rating > 0 ? `+${s.rating}` : s.rating} {s.name}
           </label>
@@ -140,70 +140,39 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       <h2>Roll a Check</h2>
       <form className="stack" onSubmit={handleRoll}>
         <div className="row">
-          <label htmlFor={`${baseId}-actor`}>Actor</label>
-          <select id={`${baseId}-actor`} value={actor.id} onChange={(e) => onSelectActor(e.target.value)}>
-            {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <label htmlFor={`${baseId}-skill`}>Skill</label>
-          <select id={`${baseId}-skill`} value={actorSkill.id} onChange={(e) => setActorSkillId(e.target.value)}>
-            {actor.skills.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.level}d6)</option>)}
-          </select>
-          <label htmlFor={`${baseId}-action`}>Action</label>
-          <input id={`${baseId}-action`} type="text" value={action} onChange={(e) => setAction(e.target.value)} placeholder="Say what you do…" />
+          <div className="field-inline"><label htmlFor={`${baseId}-actor`}>Actor</label><select id={`${baseId}-actor`} value={actor.id} onChange={(e) => onSelectActor(e.target.value)}>{characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div className="field-inline"><label htmlFor={`${baseId}-skill`}>Skill</label><select id={`${baseId}-skill`} value={actorSkill.id} onChange={(e) => setActorSkillId(e.target.value)}>{actor.skills.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.level}d6)</option>)}</select></div>
+          <div className="field-inline field-grow"><label htmlFor={`${baseId}-action`}>Action</label><input id={`${baseId}-action`} type="text" value={action} onChange={(e) => setAction(e.target.value)} placeholder="Say what you do…" /></div>
         </div>
         {renderStatusToggles(`${actor.name} statuses`, actor.statuses)}
         <div className="row">
-          <label htmlFor={`${baseId}-modval`}>Modifier</label>
-          <input id={`${baseId}-modval`} type="number" step={1} value={modValue} onChange={(e) => setModValue(e.target.value)} placeholder="+2 / -4" />
+          <div className="field-inline"><label htmlFor={`${baseId}-modval`}>Modifier</label><input id={`${baseId}-modval`} type="number" step={1} value={modValue} onChange={(e) => setModValue(e.target.value)} placeholder="+2 / -4" /></div>
           <input aria-label="Modifier label" type="text" value={modLabel} onChange={(e) => setModLabel(e.target.value)} placeholder="Modifier label (optional)" />
         </div>
         <fieldset className="stack">
           <legend>Opposition</legend>
           <div className="row">
-            <label htmlFor={`${baseId}-mode`}>Mode</label>
-            <select id={`${baseId}-mode`} value={mode} onChange={(e) => setMode(e.target.value as OppositionMode)}>
-              <option value="static">Static Target</option>
-              <option value="rolled">GM Dynamic Dice</option>
-              <option value="difficulty">Difficulty Preset</option>
-              <option value="character">Character Opposed</option>
-            </select>
-            {mode === 'static' && (
-              <>
-                <label htmlFor={`${baseId}-target`}>Target</label>
-                <input id={`${baseId}-target`} type="number" step={1} value={staticTarget} onChange={(e) => setStaticTarget(e.target.value)} required />
-              </>
-            )}
-            {mode === 'rolled' && (
-              <>
-                <label htmlFor={`${baseId}-gmdice`}>GM Dice (d6)</label>
-                <input id={`${baseId}-gmdice`} type="number" min={1} step={1} value={gmDiceCount} onChange={(e) => setGmDiceCount(e.target.value)} required />
-              </>
-            )}
+            <div className="field-inline">
+              <label htmlFor={`${baseId}-mode`}>Mode</label>
+              <select id={`${baseId}-mode`} value={mode} onChange={(e) => setMode(e.target.value as OppositionMode)}>
+                <option value="static">Static Target</option><option value="rolled">GM Dynamic Dice</option>
+                <option value="difficulty">Difficulty Preset</option><option value="character">Character Opposed</option>
+              </select>
+            </div>
+            {mode === 'static' && <div className="field-inline"><label htmlFor={`${baseId}-target`}>Target</label><input id={`${baseId}-target`} type="number" step={1} value={staticTarget} onChange={(e) => setStaticTarget(e.target.value)} required /></div>}
+            {mode === 'rolled' && <div className="field-inline"><label htmlFor={`${baseId}-gmdice`}>GM Dice (d6)</label><input id={`${baseId}-gmdice`} type="number" min={1} step={1} value={gmDiceCount} onChange={(e) => setGmDiceCount(e.target.value)} required /></div>}
             {mode === 'difficulty' && (
               <>
-                <label htmlFor={`${baseId}-tier`}>Difficulty</label>
-                <select id={`${baseId}-tier`} value={difficultyTier} onChange={(e) => setDifficultyTier(Number(e.target.value) as DifficultyTier)}>
-                  {DIFFICULTY_OPTIONS.map((opt) => <option key={opt.tier} value={opt.tier}>{opt.label}</option>)}
-                </select>
-                <label htmlFor={`${baseId}-diffmode`}>Resolution</label>
-                <select id={`${baseId}-diffmode`} value={difficultyMode} onChange={(e) => setDifficultyMode(e.target.value as DifficultyMode)}>
-                  <option value="static">Static Target</option>
-                  <option value="dynamic">Dynamic Roll</option>
-                </select>
+                <div className="field-inline"><label htmlFor={`${baseId}-tier`}>Difficulty</label><select id={`${baseId}-tier`} value={difficultyTier} onChange={(e) => setDifficultyTier(Number(e.target.value) as DifficultyTier)}>{DIFFICULTY_OPTIONS.map((opt) => <option key={opt.tier} value={opt.tier}>{opt.label}</option>)}</select></div>
+                <div className="field-inline"><label htmlFor={`${baseId}-diffmode`}>Resolution</label><select id={`${baseId}-diffmode`} value={difficultyMode} onChange={(e) => setDifficultyMode(e.target.value as DifficultyMode)}><option value="static">Static Target</option><option value="dynamic">Dynamic Roll</option></select></div>
               </>
             )}
             {mode === 'character' && (!defender || !defenderSkill ? (
               <span className="muted">Add another character to roll opposed checks.</span>
             ) : (
               <>
-                <label htmlFor={`${baseId}-def`}>Defender</label>
-                <select id={`${baseId}-def`} value={defender.id} onChange={(e) => setDefenderId(e.target.value)}>
-                  {otherCharacters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <label htmlFor={`${baseId}-defskill`}>Defender Skill</label>
-                <select id={`${baseId}-defskill`} value={defenderSkill.id} onChange={(e) => setDefenderSkillId(e.target.value)}>
-                  {defender.skills.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.level}d6)</option>)}
-                </select>
+                <div className="field-inline"><label htmlFor={`${baseId}-def`}>Defender</label><select id={`${baseId}-def`} value={defender.id} onChange={(e) => setDefenderId(e.target.value)}>{otherCharacters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                <div className="field-inline"><label htmlFor={`${baseId}-defskill`}>Defender Skill</label><select id={`${baseId}-defskill`} value={defenderSkill.id} onChange={(e) => setDefenderSkillId(e.target.value)}>{defender.skills.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.level}d6)</option>)}</select></div>
               </>
             ))}
           </div>
@@ -214,7 +183,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       {activeRoll && checkResult && (
         <output className="stack" aria-live="polite">
           <div className="row-between">
-            <strong>
+            <strong className="roll-title">
               {activeRoll.kind === 'vs_opposition'
                 ? `${activeRoll.outcome.character.name} — ${activeRoll.outcome.skillUsed.name}`
                 : `${activeRoll.outcome.actor.name} (${activeRoll.outcome.actorSkill.name}) vs ${activeRoll.outcome.defender.name} (${activeRoll.outcome.defenderSkill.name})`}

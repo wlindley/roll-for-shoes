@@ -63,11 +63,12 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
       <div className="row">
         <span>Rolled:</span>
         <DiceRow dice={pending.rawDice} />
-        <span className="badge">
-          {pending.naturalAllSixes
-            ? 'Natural all 6s — 0 XP free unlock!'
-            : `Spend ${pending.xpCostToAdvance} XP to upgrade non-6 dice to 6s (for advancement only; ${character.xp} XP available)`}
-        </span>
+        <span className="badge">{pending.naturalAllSixes ? 'Natural all 6s — 0 XP!' : `Cost: ${pending.xpCostToAdvance} XP`}</span>
+        {!pending.naturalAllSixes && (
+          <span className="muted">
+            Spend {pending.xpCostToAdvance} XP to upgrade non-6 dice to 6s (for advancement only; {character.xp} XP available)
+          </span>
+        )}
       </div>
       {promptError && <div className="error-banner" role="alert">{promptError}</div>}
       <form className="stack" onSubmit={handleClaim}>
@@ -76,18 +77,18 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
             <legend>Level {pending.targetLevel} Skill Slots Full ({slotSummary.usedSlots}/{slotSummary.maxSlots} slots used)</legend>
             {canReplace && canPurchaseSlot && (
               <div className="row">
-                <label className="row">
+                <label className="field-inline">
                   <input type="radio" name={`${baseId}-mode`} checked={effectiveAction === 'replace'} onChange={() => setSlotAction('replace')} />
                   Replace existing skill
                 </label>
-                <label className="row">
+                <label className="field-inline">
                   <input type="radio" name={`${baseId}-mode`} checked={effectiveAction === 'buy'} onChange={() => setSlotAction('buy')} />
                   Buy Slot +{slotSummary.nextSlotXpCost} XP
                 </label>
               </div>
             )}
             {effectiveAction === 'replace' && (
-              <div className="row">
+              <div className="field-inline">
                 <label htmlFor={`${baseId}-replace`}>Replace Level {pending.targetLevel} skill</label>
                 <select id={`${baseId}-replace`} value={selectedReplaceId} onChange={(e) => setReplaceSkillId(e.target.value)}>
                   {replaceableSkills.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.level}d6)</option>)}
@@ -104,8 +105,10 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
           </fieldset>
         )}
         <div className="row">
-          <label htmlFor={`${baseId}-skill`}>New Level {pending.targetLevel} skill</label>
-          <input id={`${baseId}-skill`} type="text" value={newSkillName} onChange={(e) => setNewSkillName(e.target.value)} placeholder={`Specific ${pending.usedSkillName} specialty`} required />
+          <div className="field-inline field-grow">
+            <label htmlFor={`${baseId}-skill`}>New Level {pending.targetLevel} skill</label>
+            <input id={`${baseId}-skill`} type="text" value={newSkillName} onChange={(e) => setNewSkillName(e.target.value)} placeholder={`Specific ${pending.usedSkillName} specialty`} required />
+          </div>
           <button type="submit" className="btn btn-primary">
             {slotsFull && effectiveAction === 'buy' ? `Buy Slot (+${slotSummary.nextSlotXpCost} XP) & Claim` : `Claim Level ${pending.targetLevel} Skill`}
           </button>

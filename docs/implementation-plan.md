@@ -7,8 +7,8 @@
    - **Hard Limit**: **<= 200 lines of code** per commit (measured across added/modified lines in `src/` production + test files and project configs, excluding `package-lock.json` and markdown documentation). Any diff exceeding 200 LOC is automatically rejected by `rfs-commit-reviewer` and must be split.
 2. **Human Review Gate (Commits 1–6 — Completed)**:
    - Commits 1 through 6 paused for user review prior to `git commit`.
-3. **Autonomous Execution (Commits 7–32)**:
-   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 32**.
+3. **Autonomous Execution (Commits 7–36)**:
+   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 36**.
 
 ### Per-Commit Workflow
 
@@ -112,3 +112,14 @@ sequenceDiagram
 | **Commit 30** | ~110 | `public/manifest.webmanifest` (`id: "/"`, `standalone`, separated `any` / `maskable` icons), `public/icons/*`, `index.html` (`viewport-fit=cover`, dual `theme-color`), `pwaServiceWorkerPlugin` in `vite.config.ts` emitting `sw.js`, and `/sw.js` registration in `src/main.tsx` | `tsc`, `vite build` (`dist/manifest.webmanifest`, `dist/sw.js`, `dist/icons/*`), `vitest` | Autonomous |
 | **Commit 31** | ~105 | `<InstallAppButton />` (`navigator.install` + `beforeinstallprompt`, standalone detection, `aria-disabled` focus preservation, `AbortError` retry, `role="status"`), `.app-header` integration in `App.tsx`, standalone `env(safe-area-inset-*)` styles in `src/ui/styles.css`, and PWA documentation | `tsc`, `vite build`, `vitest` | Autonomous |
 | **Commit 32** | ~65 | Subpath-safe GitHub Pages PWA config (`base: './'` and relative `./` precache/navigation fallback in `vite.config.ts`, `"id": "roll_for_shoes"` & `./` URLs in `public/manifest.webmanifest`, `./` links in `index.html`, `'./sw.js'` registration in `src/main.tsx`) and `.github/workflows/deploy-pages.yml` CI/CD workflow | `tsc`, `vite build` (`dist/index.html` & `dist/sw.js` `./assets/...`), `vitest` | Autonomous |
+
+---
+
+### Milestone 5: Character Portraits, Storage Polish & Responsive Layout (Commits 33–36)
+
+| Commit | Est. LOC | Scope & Capabilities | Verification / Test Cases | Review Mode |
+| :--- | :---: | :--- | :--- | :--- |
+| **Commit 33** | ~105 | Optional `character.portrait?: string` (`Character.create(..., { portrait })`, `Character.builder().withPortrait(portrait)`, immutable `character.withPortrait(portrait \| null)`, non-blank validation, and `Character` / `Campaign` / `Workspace` JSON round-trip persistence) in `src/character/` & `src/campaign/` | `CHR-PORTRAIT-01`..`03`, `CMP-PORTRAIT-01` | Autonomous |
+| **Commit 34** | ~15 | Simplify browser persistence UX by always using persistent `LocalStorageAdapter` and removing the UI in-memory storage toggle from `App.tsx` and `CampaignSidebar.tsx` | `tsc`, `vite build`, `vitest` | Autonomous |
+| **Commit 35** | ~145 | Client-side square center-cropped `<= 256×256` WebP/JPEG portrait encoder & initials fallback (`src/ui/portrait-image.ts`) + portrait picker, live `64×64` preview, change, and clear controls in `CreateCharacterDialog.tsx` and `CharacterCard.tsx` | `tsc`, `vite build`, `vitest` | Autonomous |
+| **Commit 36** | ~155 | Wider character cards (`minmax(min(100%, 380px), 1fr)`, `1.25rem` padding, `64×64` `.character-avatar`, non-wrapping `.badge`) and responsive phone (`360px`–`639px`), tablet (`640px`–`959px`), and laptop (`960px+`) layout pass (`styles.css`, collapsible mobile drawer in `CampaignSidebar.tsx`, paired form fields in `CheckRollerPanel.tsx`, `AdvancementPrompt.tsx`, `StatusManager.tsx`, `RollHistoryLog.tsx`, and docs) | `tsc`, `vite build`, `vitest` | Autonomous |

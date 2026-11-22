@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { Workspace } from '../../campaign';
 import { type Character, Status } from '../../character';
 import type { DiceRoller } from '../../dice';
@@ -19,6 +19,7 @@ export function StatusManager({ workspace, character, diceRoller, onChange, onEr
   const [rating, setRating] = useState('-2');
   const [diceCount, setDiceCount] = useState('1');
   const [polarity, setPolarity] = useState<'negative' | 'positive'>('negative');
+  const baseId = useId();
 
   if (!statusesEnabled && character.statuses.length === 0) return null;
 
@@ -52,18 +53,27 @@ export function StatusManager({ workspace, character, diceRoller, onChange, onEr
       )}
       {statusesEnabled && (
         <form className="row" onSubmit={handleAdd} aria-label={`Add status to ${character.name}`}>
-          <input type="text" aria-label="Status name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Status (e.g. Raining)" required />
-          <select aria-label="Status mode" value={entryMode} onChange={(e) => setEntryMode(e.target.value as 'fixed' | 'roll')}>
-            <option value="fixed">Fixed</option><option value="roll">Roll d6</option>
-          </select>
+          <div className="field-inline field-grow">
+            <label htmlFor={`${baseId}-name`}>Status</label>
+            <input id={`${baseId}-name`} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Raining" required />
+          </div>
+          <div className="field-inline">
+            <label htmlFor={`${baseId}-mode`}>Mode</label>
+            <select id={`${baseId}-mode`} value={entryMode} onChange={(e) => setEntryMode(e.target.value as 'fixed' | 'roll')}>
+              <option value="fixed">Fixed</option><option value="roll">Roll d6</option>
+            </select>
+          </div>
           {entryMode === 'fixed' ? (
-            <input type="number" aria-label="Status rating" step={1} value={rating} onChange={(e) => setRating(e.target.value)} required />
+            <div className="field-inline"><label htmlFor={`${baseId}-rating`}>Rating</label><input id={`${baseId}-rating`} type="number" step={1} value={rating} onChange={(e) => setRating(e.target.value)} required /></div>
           ) : (
             <>
-              <input type="number" aria-label="Status dice" min={1} step={1} value={diceCount} onChange={(e) => setDiceCount(e.target.value)} required />
-              <select aria-label="Status polarity" value={polarity} onChange={(e) => setPolarity(e.target.value as 'negative' | 'positive')}>
-                <option value="negative">- Penalty</option><option value="positive">+ Bonus</option>
-              </select>
+              <div className="field-inline"><label htmlFor={`${baseId}-dice`}>Dice</label><input id={`${baseId}-dice`} type="number" min={1} step={1} value={diceCount} onChange={(e) => setDiceCount(e.target.value)} required /></div>
+              <div className="field-inline">
+                <label htmlFor={`${baseId}-polarity`}>Type</label>
+                <select id={`${baseId}-polarity`} value={polarity} onChange={(e) => setPolarity(e.target.value as 'negative' | 'positive')}>
+                  <option value="negative">- Penalty</option><option value="positive">+ Bonus</option>
+                </select>
+              </div>
             </>
           )}
           <button type="submit" className="btn">+ Status</button>
