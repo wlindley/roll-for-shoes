@@ -51,6 +51,7 @@ flowchart TD
 
 ```text
 roll_for_shoes/
+├── README.md                        # Quick start & index of per-module guides
 ├── AGENTS.md                        # Workspace-wide rules enforced for all agents/subagents
 ├── .agents/
 │   └── plugins/
@@ -81,6 +82,7 @@ roll_for_shoes/
 └── src/
     ├── main.tsx                     # Mounts <App /> and registers /sw.js in production builds
     ├── dice/
+    │   ├── README.md
     │   ├── index.ts
     │   ├── types.ts
     │   ├── dice-roll.ts
@@ -88,6 +90,7 @@ roll_for_shoes/
     │   ├── stub-dice-roller.ts
     │   └── dice.test.ts
     ├── checks/
+    │   ├── README.md
     │   ├── index.ts
     │   ├── types.ts
     │   ├── rolled-pool.ts
@@ -95,6 +98,7 @@ roll_for_shoes/
     │   ├── check.ts
     │   └── checks.test.ts
     ├── character/
+    │   ├── README.md
     │   ├── index.ts
     │   ├── skill.ts
     │   ├── status.ts
@@ -104,6 +108,7 @@ roll_for_shoes/
     │   ├── serialize.ts
     │   └── character.test.ts
     ├── campaign/
+    │   ├── README.md
     │   ├── index.ts
     │   ├── campaign.ts
     │   ├── workspace.ts
@@ -111,6 +116,7 @@ roll_for_shoes/
     │   ├── storage.ts
     │   └── campaign.test.ts
     └── ui/
+        ├── README.md
         ├── App.tsx
         ├── portrait-image.ts
         ├── styles.css

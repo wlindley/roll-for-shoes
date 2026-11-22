@@ -13,14 +13,28 @@ Client-only TypeScript implementation of the tabletop micro-RPG **Roll for Shoes
 
 ---
 
-## Documentation Index
+## Per-Module Documentation
+
+Each module in `src/` has a dedicated guide explaining **what it is**, **how to use it** (with copy-pasteable TypeScript/TSX examples), and its **complete public interface**:
+
+| Module | Guide | Allowed Internal Imports | Summary |
+| :--- | :--- | :--- | :--- |
+| **1. Dice** | **[`../src/dice/README.md`](../src/dice/README.md)** | *(none)* | `DieValue`, `DiceRoll` (`total` getter), `DiceRoller`, cryptographic `RandomDiceRoller`, and deterministic `StubDiceRoller`. |
+| **2. Checks** | **[`../src/checks/README.md`](../src/checks/README.md)** | `src/dice` | Fluent `Check` builder, `RolledPool` computed getters, `TiesMode`, and polymorphic `CheckOpposition` (`StaticOpposition`, `RolledOpposition`, `DifficultyOpposition`). |
+| **3. Character** | **[`../src/character/README.md`](../src/character/README.md)** | `src/dice`, `src/checks` | Immutable `Character`, `Skill`, `Status`, `SkillSlotConfig`, optional `portrait`, fluent check & advancement builders, and JSON serialization. |
+| **4. Campaign & Storage** | **[`../src/campaign/README.md`](../src/campaign/README.md)** | `src/dice`, `src/checks`, `src/character` | Immutable `Campaign` & `Workspace`, fluent scopes (`workspace.activeCampaign.character(...)`), roll log, JSON import/export, and `StorageAdapter`. |
+| **5. Browser UI** | **[`../src/ui/README.md`](../src/ui/README.md)** | `src/dice`, `src/checks`, `src/character`, `src/campaign` | Declarative React + TypeScript components, hideable sidebar, `ActionMenu`, portrait compression (`portrait-image.ts`), and PWA install button. |
+
+---
+
+## Project-Wide Specifications
 
 | Document | Purpose |
 | :--- | :--- |
 | **[`architecture.md`](./architecture.md)** | Layered module graph, OOP/fluent builder design, computed-getter model, persistence strategy, and testing philosophy. |
 | **[`interfaces.md`](./interfaces.md)** | Authoritative TypeScript classes, interfaces, fluent builders, getters, and contracts for all 5 modules. |
 | **[`test-cases.md`](./test-cases.md)** | Comprehensive catalog of boundary test cases (`DICE-*`, `CHK-*`, `CHR-*`, `CMP-*`) covering every public method/getter, plus manual UI scenarios (`UI-*`). |
-| **[`implementation-plan.md`](./implementation-plan.md)** | Fine-grained 29-commit roadmap (~100 LOC target, <= 200 LOC max per commit), marking the human review gate on Commits 1–10. |
+| **[`implementation-plan.md`](./implementation-plan.md)** | Fine-grained incremental TDD commit roadmap (~100 LOC target, `<= 200 LOC` max per commit). |
 | **[`subagents.md`](./subagents.md)** | Specification of the multi-agent TDD team (`rfs-coordinator`, `rfs-test-author`, `rfs-implementer`, `rfs-ui-builder`, `rfs-commit-reviewer`). |
 
 ---

@@ -731,15 +731,20 @@ export function App(props: AppProps): React.JSX.Element;
 
 ### UI Component Boundaries & Responsibilities
 
-| Component | Responsibility | Commits |
+| Component / Utility | Responsibility | Commits |
 | :--- | :--- | :--- |
-| **`App`** | Loads `Workspace` via `Workspace.load(storageAdapter)`, auto-saves via `workspace.save(activeAdapter)`, and manages active storage mode (`LocalStorageAdapter` vs. `MemoryStorageAdapter`). | Commit 15 |
-| **`CampaignSidebar`** | Lists campaigns, switches/creates/renames/deletes campaigns, exports `campaign.exportJson()`, and imports via `workspace.importCampaign()`. | Commit 16 |
-| **`CharacterGrid` & `CharacterCard`** | Displays **multiple characters simultaneously** side-by-side in the active campaign, showing XP, skills, `pendingAdvancement` callout, Status badges (`Commit 25`), and Skill Slot indicators (`Commit 29`). | Commits 17, 25, 29 |
-| **`CreateCharacterDialog`** | Creates characters via `Character.create` or `Character.builder(...).withStartingSkill(...)` (`Commit 26`). | Commits 17, 26 |
-| **`CheckRollerPanel`** | Builds checks via `workspace.activeCampaign.character(...).makeCheck(...)` against `StaticOpposition`, `RolledOpposition`, another `Character`, or `DifficultyOpposition` (`Commit 22`), with status/modifier toggles (`Commit 25`). | Commits 18, 22, 25 |
-| **`AdvancementPrompt`** | Invokes `.advance(name).claim()` or `.dismissAdvancement()`, supporting `.replacingSkill(...)` and `.purchasingSlot()` when skill slots are full (`Commit 29`). | Commits 19, 29 |
-| **`RollHistoryLog`** | Displays `activeCampaign.rollLog` entries using `CheckResult` and `RolledPool` getters. | Commit 19 |
-| **`CampaignSettingsDialog`** | Edits `activeCampaign.withRules(...)` (`tiesMode`, `statusesEnabled`, `allowCustomStartingSkills`, `skillSlots`). | Commits 22, 25, 26, 29 |
-| **`StatusManager`** | Creates statuses via `Status.create` or `Status.roll` and updates characters via `.addStatus()` / `.removeStatus()`. | Commit 25 |
+| **`App`** | Loads `Workspace` via `Workspace.load(storageAdapter)`, auto-saves via `workspace.save(storageAdapter)`, toggles the hideable `CampaignSidebar` (hidden by default once a campaign is displayed), and hosts `Campaign Options` (`RenameCampaignDialog` + `CampaignSettingsDialog`). | Commits 15, 34, 39, 40 |
+| **`AppIcon`** | Renders the inline decorative shoe-with-6-sided-die `<svg>` mark in `.app-header`. | Commit 40 |
+| **`ActionMenu`** | Accessible keyboard-navigable WAI-ARIA menu button (`aria-haspopup="menu"`, `ArrowUp`/`ArrowDown`/`Home`/`End`/`Escape`, focus-out & outside-click dismissal) powering `Campaign Options` and `Advanced Options`. | Commit 38 |
+| **`CampaignSidebar`** | Hideable campaign switcher/creator (`workspace.selectCampaign`, `workspace.createCampaign`, `workspace.deleteCampaign`) with an `Advanced Options` menu for `campaign.exportJson()` and `workspace.importCampaign()`. | Commits 16, 36, 39 |
+| **`RenameCampaignDialog`** | Native modal `<dialog>` renaming the active campaign via `workspace.activeCampaign.rename(name)`. | Commit 38 |
+| **`CampaignSettingsDialog`** | Native modal `<dialog>` editing `activeCampaign.withRules(...)` (`tiesMode`, `statusesEnabled`, `allowCustomStartingSkills`, `skillSlots`). | Commits 22, 25, 26, 29 |
+| **`CharacterGrid` & `CharacterCard`** | Displays **multiple characters simultaneously** in wider side-by-side cards with `64×64` portraits (`character.withPortrait(...)`) / initials avatars, XP, skills, `pendingAdvancement` callout, `StatusManager`, and `SkillSlotBar`. | Commits 17, 25, 29, 35, 36 |
+| **`CreateCharacterDialog`** | Creates characters via `Character.create` or `Character.builder(...)` with optional portrait upload/preview and custom starting skills. | Commits 17, 26, 35 |
+| **`portrait-image.ts`** | Center-crops and scales uploaded portrait files to `<= 256×256` WebP/JPEG data URLs (`encodePortraitFile`) and derives fallback initials (`characterInitials`). | Commit 35 |
+| **`CheckRollerPanel`** | Builds checks via `workspace.activeCampaign.character(...).makeCheck(...)` against `StaticOpposition`, `RolledOpposition`, another `Character`, or `DifficultyOpposition`, with status/modifier toggles. | Commits 18, 22, 25, 36 |
+| **`AdvancementPrompt`** | Invokes `.advance(name).claim()` or `.dismissAdvancement()`, supporting `.replacingSkill(...)` and `.purchasingSlot()` when skill slots are full. | Commits 19, 29, 36 |
+| **`RollHistoryLog`** | Displays `activeCampaign.rollLog` entries using `CheckResult` and `RolledPool` computed getters. | Commits 19, 36 |
+| **`StatusManager`** | Creates statuses via `Status.create` or `Status.roll` and updates characters via `.addStatus()` / `.removeStatus()`. | Commits 25, 36 |
 | **`SkillSlotBar`** | Displays `character.getSkillSlotSummary(level, slotConfig)` and triggers `character.purchaseSkillSlot(level, slotConfig)`. | Commit 29 |
+| **`InstallAppButton`** | Triggers PWA installation via `navigator.install()` or `beforeinstallprompt` when not already running in standalone mode. | Commit 31 |
