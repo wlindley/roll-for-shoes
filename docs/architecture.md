@@ -116,6 +116,7 @@ roll_for_shoes/
         ├── styles.css
         └── components/
             ├── ActionMenu.tsx
+            ├── AppIcon.tsx
             ├── CampaignSidebar.tsx
             ├── CampaignSettingsDialog.tsx
             ├── RenameCampaignDialog.tsx

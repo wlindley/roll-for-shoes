@@ -4,6 +4,7 @@ import { type StorageAdapter, Workspace } from '../campaign';
 import type { DiceRoller } from '../dice';
 import { ActionMenu } from './components/ActionMenu';
 import { AdvancementPrompt } from './components/AdvancementPrompt';
+import { AppIcon } from './components/AppIcon';
 import { CampaignSettingsDialog } from './components/CampaignSettingsDialog';
 import { CampaignSidebar } from './components/CampaignSidebar';
 import { CharacterGrid } from './components/CharacterGrid';
@@ -59,7 +60,7 @@ export function App(props: AppProps): React.JSX.Element {
     <div className={showSidebar ? 'app-shell has-sidebar' : 'app-shell'}>
       <header className="app-header">
         <div className="app-brand">
-          <img src="./icons/icon.svg" alt="" width={30} height={30} className="app-logo" />
+          <AppIcon />
           <h1>Roll for Shoes</h1>
         </div>
         <div className="row">
