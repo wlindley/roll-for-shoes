@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Workspace } from '../../campaign';
 import { Character, DEFAULT_STARTING_SKILL_NAME } from '../../character';
+import { characterInitials, encodePortraitFile } from '../portrait-image';
 
 export interface CreateCharacterDialogProps {
   readonly workspace: Workspace;
@@ -20,19 +21,24 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
   const { workspace, open, onClose, onChange } = props;
   const allowCustom = workspace.activeCampaign.campaign.rules.allowCustomStartingSkills;
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const nextRowKey = useRef(0);
   const [name, setName] = useState('');
+  const [portrait, setPortrait] = useState<string | null>(null);
   const [startingSkills, setStartingSkills] = useState<readonly StartingSkillRow[]>([]);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const nameId = useId();
+  const portraitId = useId();
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
       setName('');
+      setPortrait(null);
       setStartingSkills([]);
       setDialogError(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       dialog.showModal();
     } else if (!open && dialog.open) {
       dialog.close();
@@ -42,14 +48,27 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
   const updateRow = (key: number, patch: Partial<StartingSkillRow>) =>
     setStartingSkills((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
+  const handlePortraitFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      setPortrait(await encodePortraitFile(file));
+      setDialogError(null);
+    } catch (err: unknown) {
+      setDialogError(err instanceof Error ? err.message : 'Unable to load portrait.');
+    } finally {
+      input.value = '';
+    }
+  };
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const character =
-        allowCustom && startingSkills.length > 0
-          ? startingSkills.reduce((b, row) => b.withStartingSkill(row.name, Number(row.level)), Character.builder(name)).build()
-          : Character.create(name);
-      onChange(workspace.activeCampaign.addCharacter(character));
+      let builder = Character.builder(name);
+      if (portrait) builder = builder.withPortrait(portrait);
+      if (allowCustom) builder = startingSkills.reduce((b, row) => b.withStartingSkill(row.name, Number(row.level)), builder);
+      onChange(workspace.activeCampaign.addCharacter(builder.build()));
       onClose();
     } catch (err: unknown) {
       setDialogError(err instanceof Error ? err.message : 'Unable to create character.');
@@ -63,6 +82,22 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
         {dialogError && <div className="error-banner" role="alert">{dialogError}</div>}
         <label htmlFor={nameId}>Character name</label>
         <input id={nameId} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bob" required />
+        <div className="stack">
+          <label htmlFor={portraitId}>Portrait (optional)</label>
+          <div className="row">
+            {portrait ? (
+              <img src={portrait} alt="Character portrait preview" width={64} height={64} className="character-avatar" />
+            ) : (
+              <div className="character-avatar character-avatar-fallback" aria-hidden="true">{characterInitials(name.trim() || '?')}</div>
+            )}
+            <input ref={fileInputRef} id={portraitId} type="file" accept="image/*" onChange={handlePortraitFile} />
+            {portrait && (
+              <button type="button" className="btn" onClick={() => { setPortrait(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+                Clear Portrait
+              </button>
+            )}
+          </div>
+        </div>
         {allowCustom && (
           <fieldset className="stack">
             <legend>Custom Starting Skills</legend>
