@@ -123,3 +123,13 @@ sequenceDiagram
 | **Commit 34** | ~15 | Simplify browser persistence UX by always using persistent `LocalStorageAdapter` and removing the UI in-memory storage toggle from `App.tsx` and `CampaignSidebar.tsx` | `tsc`, `vite build`, `vitest` | Autonomous |
 | **Commit 35** | ~145 | Client-side square center-cropped `<= 256×256` WebP/JPEG portrait encoder & initials fallback (`src/ui/portrait-image.ts`) + portrait picker, live `64×64` preview, change, and clear controls in `CreateCharacterDialog.tsx` and `CharacterCard.tsx` | `tsc`, `vite build`, `vitest` | Autonomous |
 | **Commit 36** | ~155 | Wider character cards (`minmax(min(100%, 380px), 1fr)`, `1.25rem` padding, `64×64` `.character-avatar`, non-wrapping `.badge`) and responsive phone (`360px`–`639px`), tablet (`640px`–`959px`), and laptop (`960px+`) layout pass (`styles.css`, collapsible mobile drawer in `CampaignSidebar.tsx`, paired form fields in `CheckRollerPanel.tsx`, `AdvancementPrompt.tsx`, `StatusManager.tsx`, `RollHistoryLog.tsx`, and docs) | `tsc`, `vite build`, `vitest` | Autonomous |
+
+---
+
+### Milestone 6: Shoe+d6 App Icon, Hideable Sidebar & Options Menus (Commits 37–39)
+
+| Commit | Est. LOC | Scope & Capabilities | Verification | Review Mode |
+| :--- | :---: | :--- | :--- | :--- |
+| **Commit 37** | ~45 | Update PWA & favicon icons (`public/icons/icon.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) to an athletic shoe with a 6-sided die | `vite build` (`dist/icons/*`), pixel dimension verification | Autonomous |
+| **Commit 38** | ~147 | Accessible keyboard-navigable `<ActionMenu />` (`src/ui/components/ActionMenu.tsx`) and modal `<RenameCampaignDialog />` (`src/ui/components/RenameCampaignDialog.tsx`) | `tsc`, `vite build`, `vitest` | Autonomous |
+| **Commit 39** | ~142 | Hideable default-closed `CampaignSidebar` across wide and narrow views, `Advanced Options` menu for campaign JSON export/import, `Campaign Options` menu grouping `Rename Campaign` + `Campaign Rules` in `App.tsx`, and menu/layout styles in `src/ui/styles.css` | `tsc`, `vite build`, `vitest` | Autonomous |
