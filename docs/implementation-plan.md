@@ -7,8 +7,8 @@
    - **Hard Limit**: **<= 200 lines of code** per commit (measured across added/modified lines in `src/` production + test files and project configs, excluding `package-lock.json` and markdown documentation). Any diff exceeding 200 LOC is automatically rejected by `rfs-commit-reviewer` and must be split.
 2. **Human Review Gate (Commits 1–6 — Completed)**:
    - Commits 1 through 6 paused for user review prior to `git commit`.
-3. **Autonomous Execution (Commits 7–36)**:
-   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 36**.
+3. **Autonomous Execution (Commits 7–43)**:
+   - Starting at **Commit 7**, `rfs-coordinator` runs Red -> Green -> UI (where applicable) -> `rfs-commit-reviewer` audit -> `git commit` autonomously through **Commit 43**.
 
 ### Per-Commit Workflow
 
@@ -126,11 +126,21 @@ sequenceDiagram
 
 ---
 
-### Milestone 6: Shoe+d6 App Icon, Hideable Sidebar & Options Menus (Commits 37–39)
+### Milestone 6: Shoe+d6 App Icon, Hideable Sidebar & Options Menus (Commits 37–40)
 
 | Commit | Est. LOC | Scope & Capabilities | Verification | Review Mode |
 | :--- | :---: | :--- | :--- | :--- |
-| **Commit 37** | ~45 | Update PWA & favicon icons (`public/icons/icon.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) to an athletic shoe with a 6-sided die | `vite build` (`dist/icons/*`), pixel dimension verification | Autonomous |
+| **Commit 37** | ~45 | Update PWA & favicon icons (`public/icons/icon.svg`, `icon-192.png`, `icon-maskable-512.png`, `icon-512.png`) to an athletic shoe with a 6-sided die | `vite build` (`dist/icons/*`), pixel dimension verification | Autonomous |
 | **Commit 38** | ~147 | Accessible keyboard-navigable `<ActionMenu />` (`src/ui/components/ActionMenu.tsx`) and modal `<RenameCampaignDialog />` (`src/ui/components/RenameCampaignDialog.tsx`) | `tsc`, `vite build`, `vitest` | Autonomous |
 | **Commit 39** | ~142 | Hideable default-closed `CampaignSidebar` across wide and narrow views, `Advanced Options` menu for campaign JSON export/import, `Campaign Options` menu grouping `Rename Campaign` + `Campaign Rules` in `App.tsx`, and menu/layout styles in `src/ui/styles.css` | `tsc`, `vite build`, `vitest` | Autonomous |
 | **Commit 40** | ~75 | Inline `<AppIcon />` SVG in `.app-header` (`src/ui/components/AppIcon.tsx`), cache-busted `?v=2` favicon/manifest icon URLs, and `public/` content hashing + `{ cache: 'reload' }` precaching in `vite.config.ts` so header & tab icons never serve stale SW caches | `tsc`, `vite build`, `vitest` | Autonomous |
+
+---
+
+### Milestone 7: Physical / Predetermined Dice Support (Commits 41–43)
+
+| Commit | Est. LOC | Scope & Capabilities | Verification / Test Cases | Review Mode |
+| :--- | :---: | :--- | :--- | :--- |
+| **Commit 41** | ~115 | Predetermined / physical dice support in `src/checks/` (`Check.fromDice`, `Check.withDiceValues`, `ReadyCheck.withDiceValues`, `RolledOpposition.fromDice` & `withDiceValues`, dynamic `DifficultyOpposition.withDiceValues` with static-mode rejection, and count/`DieValue` validation) | `CHK-MAN-01`..`05` | Autonomous |
+| **Commit 42** | ~95 | Actor and defender physical dice support in `src/character/` (`CharacterCheckBuilder.withDiceValues`, `OpposedParticipantBuilder.withDiceValues`) and `src/campaign/` (`ScopedCheckBuilder.withDiceValues` + defender `withDiceValues` status-guard forwarding) | `CHR-MAN-01`..`03`, `CMP-MAN-01` | Autonomous |
+| **Commit 43** | ~115 | `<PhysicalDiceInput />` (`normalizePhysicalDice`, `PhysicalDiceInputProps`) in `src/ui/components/PhysicalDiceInput.tsx`, actor & opposition physical dice toggles in `CheckRollerPanel.tsx`, and `.die-select` styles in `src/ui/styles.css` | `tsc`, `vite build`, `vitest` (`UI-07`) | Autonomous |

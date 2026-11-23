@@ -34,6 +34,7 @@ src/ui/
     ├── CheckRollerPanel.tsx             # Check builder form, opposition modes & live roll output
     ├── CreateCharacterDialog.tsx        # Native <dialog> modal for new characters & custom skills
     ├── InstallAppButton.tsx             # Standalone-aware PWA install button & live status region
+    ├── PhysicalDiceInput.tsx            # Toggleable 1..6 physical dice selectors & count normalizer
     ├── RenameCampaignDialog.tsx         # Native <dialog> modal for renaming the active campaign
     ├── RollHistoryLog.tsx               # Campaign-scoped chronological check history list
     ├── SkillSlotBar.tsx                 # Per-level skill slot summary badges & XP slot purchasing
@@ -392,22 +393,23 @@ export function outcomeLabel(outcome: CheckOutcome): string;
 export function DiceRow(props: { readonly dice: readonly DieValue[] }): React.JSX.Element;
 ```
 
-- **Responsibility**: Interactive check builder form and polite live `<output>` result card. Supports choosing the acting character and skill, describing the narrative action, toggling active actor/defender statuses (when `statusesEnabled`), adding an optional integer situational modifier + label, and resolving against four opposition modes:
+- **Responsibility**: Interactive check builder form and polite live `<output>` result card. Supports choosing the acting character and skill, describing the narrative action, optionally entering predetermined physical dice via [`PhysicalDiceInput`](./components/PhysicalDiceInput.tsx) for the actor and/or rolled opposition (`GM Dynamic Dice`, `'dynamic'` `Difficulty Preset`, and `Character Opposed`), toggling active actor/defender statuses (when `statusesEnabled`), adding an optional integer situational modifier + label, and resolving against four opposition modes:
   1. `Static Target` (`StaticOpposition`)
   2. `GM Dynamic Dice` (`RolledOpposition`)
   3. `Difficulty Preset` (`DifficultyOpposition` across `Easy` / `Moderate` / `Hard` / `VeryHard` in `'static'` or `'dynamic'` mode)
-  4. `Character Opposed` (actor vs. defender character & skill, with independent defender status toggles)
+  4. `Character Opposed` (actor vs. defender character & skill, with independent defender status and physical dice toggles)
 
   Also exports `DiceRow` (renders d6 badges, highlighting `6`s with `.die-six`), `outcomeBadgeClass`, and `outcomeLabel`.
 - **Domain Methods, Classes & Getters Invoked**:
   - `workspace.activeCampaign.campaign` (`.id`, `.characters`, `.rules.statusesEnabled`), `Character` (`.id`, `.name`, `.skills`, `.statuses`), `Skill` (`.id`, `.name`, `.level`), `Status` (`.id`, `.name`, `.rating`)
-  - Opposition classes & enum from `../../checks`: `new StaticOpposition(target)`, `new RolledOpposition(gmDiceCount)`, `new DifficultyOpposition(difficultyTier, difficultyMode)`, `DifficultyTier` (`Easy`, `Moderate`, `Hard`, `VeryHard`)
+  - Opposition classes & enum from `../../checks`: `new StaticOpposition(target)`, `new RolledOpposition(gmDiceCount)` (plus `.withDiceValues(...)`), `new DifficultyOpposition(difficultyTier, difficultyMode)` (plus `.withDiceValues(...)` in `'dynamic'` mode), `DifficultyTier` (`Easy`, `Moderate`, `Hard`, `VeryHard`)
   - `workspace.activeCampaign.character(actor.id).makeCheck(actorSkill.id)` -> `ScopedCheckBuilder`:
     - `.withAction(trimmedAction)`
+    - `.withDiceValues(normalizePhysicalDice(actorPhysicalDice, actorSkill.level))`
     - `.withStatus(statusId)`
     - `.withModifier(label, modNum)`
     - `.against(opp).roll(diceRoller)` -> `{ workspace, outcome: CharacterCheckOutcome }`
-    - `.againstCharacter(defender.id, defenderSkill.id, configureDefender?).roll(diceRoller)` (chaining `OpposedParticipantBuilder.withStatus(statusId)`) -> `{ workspace, outcome: OpposedCharacterCheckOutcome }`
+    - `.againstCharacter(defender.id, defenderSkill.id, configureDefender?).roll(diceRoller)` (chaining `OpposedParticipantBuilder.withStatus(statusId)` and `.withDiceValues(normalizePhysicalDice(oppPhysicalDice, defenderSkill.level))`) -> `{ workspace, outcome: OpposedCharacterCheckOutcome }`
   - `CharacterCheckOutcome` (`.character.name`, `.skillUsed.name`, `.checkResult`, `.xpEarned`) & `OpposedCharacterCheckOutcome` (`.actor.name`, `.actorSkill.name`, `.defender.name`, `.defenderSkill.name`, `.checkResult`, `.actorXpEarned`, `.defenderXpEarned`)
   - `CheckResult` (`.outcome`, `.margin`, `.actor.rawDice`, `.actor.rawTotal`, `.actor.finalTotal`, `.opposition.total`, `.opposition.pool?.rawDice`)
 
@@ -443,6 +445,28 @@ export function InstallAppButton(): React.JSX.Element;
 
 - **Responsibility**: Standalone-aware PWA install button rendered in the app header. Listens for `(display-mode: standalone)` changes, `beforeinstallprompt`, and `appinstalled`. Stays `hidden` when already installed/standalone or when neither `navigator.install()` nor a deferred prompt is available; uses `aria-disabled="true"` while awaiting prompt resolution to preserve focus, handles `AbortError` cancellations cleanly, and announces installation feedback via `<span role="status">`.
 - **Domain Methods & Getters Invoked**: None.
+
+---
+
+#### `PhysicalDiceInput` ([`./components/PhysicalDiceInput.tsx`](./components/PhysicalDiceInput.tsx))
+
+```ts
+export function normalizePhysicalDice(dice: readonly DieValue[], count: number): readonly DieValue[];
+
+export interface PhysicalDiceInputProps {
+  readonly label: string;
+  readonly diceCount: number;
+  readonly enabled: boolean;
+  readonly values: readonly DieValue[];
+  readonly onToggle: (enabled: boolean) => void;
+  readonly onChange: (nextValues: readonly DieValue[]) => void;
+}
+
+export function PhysicalDiceInput(props: PhysicalDiceInputProps): React.JSX.Element;
+```
+
+- **Responsibility**: Accessible toggle + `role="group"` of `1..6` `<select>` controls (`aria-label="${label} die ${idx + 1} of ${current.length}"`, highlighting `6`s with `.die-six`) allowing tabletop players and GMs to enter physical dice results instead of rolling randomly. `normalizePhysicalDice(dice, count)` clamps `count` into `1..20` (defaulting invalid counts to `1`) and pads missing entries with `1`.
+- **Domain Methods & Getters Invoked**: Uses `DieValue` (`1..6`) from `../../dice`.
 
 ---
 

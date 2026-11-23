@@ -11,14 +11,14 @@ Immutable domain model for **Roll for Shoes** characters—managing skills, XP, 
 - **Purpose**:
   - **Immutable `Character` entity** ([`character.ts`](./character.ts)) and [`CharacterBuilder`](./character.ts) with deep-frozen arrays/records (`skills`, `statuses`, `purchasedSlots`) where every state transition returns a distinct `Character` instance (`next !== prev`).
   - **Skills & Statuses** ([`skill.ts`](./skill.ts), [`status.ts`](./status.ts)): validated [`Skill`](./skill.ts) hierarchy (`parentSkillId` lineage) and persistent positive/negative [`Status`](./status.ts) modifiers created explicitly (`Status.create`) or rolled with `d6` pools (`Status.roll`).
-  - **Fluent Check & Advancement Builders** ([`builders.ts`](./builders.ts)): [`CharacterCheckBuilder`](./builders.ts) (supporting both environmental `CheckOpposition` and character-vs-character opposed rolls) and [`CharacterAdvancementBuilder`](./builders.ts) (claiming new skills via natural all-`6`s, XP dice upgrades, same-level replacement, or simultaneous slot purchases).
+  - **Fluent Check & Advancement Builders** ([`builders.ts`](./builders.ts)): [`CharacterCheckBuilder`](./builders.ts) (supporting environmental `CheckOpposition`, character-vs-character opposed rolls, and optional predetermined physical `diceValues` for actor and/or defender) and [`CharacterAdvancementBuilder`](./builders.ts) (claiming new skills via natural all-`6`s, XP dice upgrades, same-level replacement, or simultaneous slot purchases).
   - **Skill Slot Caps & Purchasing** ([`skill-slots.ts`](./skill-slots.ts)): [`SkillSlotConfig`](./skill-slots.ts) and [`SkillSlotSummary`](./skill-slots.ts) enforcing optional per-level skill caps (such as the `4 / 3 / 2` skill triangle) and `2 * level` XP slot unlocks.
   - **Portraits & Versioned Serialization** ([`character.ts`](./character.ts), [`serialize.ts`](./serialize.ts)): optional trimmed non-blank `portrait` strings (data URLs or image URLs) and deterministic `schemaVersion: 1` JSON round-tripping without storing derived getters.
 
 - **Strict One-Way DAG Position**:
   - Imports **only** from [`../dice`](../dice/index.ts) and [`../checks`](../checks/index.ts).
   - Consumed downstream by [`../campaign`](../campaign/index.ts) and [`../ui`](../ui/App.tsx). Never imports from `../campaign`, `../ui`, or `react`.
-  - Verified end-to-end by boundary tests in [`character.test.ts`](./character.test.ts) using real `../checks` classes and [`StubDiceRoller`](../dice/index.ts) (`docs/test-cases.md`: [`CHR-BASIC-*`, `CHR-TIE-*`, `CHR-STS-*`, `CHR-START-*`, `CHR-SLOT-*`, `CHR-PORTRAIT-*`](../../docs/test-cases.md)).
+  - Verified end-to-end by boundary tests in [`character.test.ts`](./character.test.ts) using real `../checks` classes and [`StubDiceRoller`](../dice/index.ts) (`docs/test-cases.md`: [`CHR-BASIC-*`, `CHR-TIE-*`, `CHR-STS-*`, `CHR-START-*`, `CHR-SLOT-*`, `CHR-PORTRAIT-*`, `CHR-MAN-*`](../../docs/test-cases.md)).
 
 - **Key Game & Domain Rules Enforced** ([`reference/rules.md`](../../reference/rules.md)):
   - **Automatic `Do Anything 1`**: Every character created via `Character.create` or `Character.builder` starts at `0` XP with `Do Anything` (`DEFAULT_STARTING_SKILL_NAME`) at level `1`. Skill names are unique per character (case-insensitively, trimmed), and `Do Anything` can never be replaced.
@@ -97,6 +97,14 @@ const duel = alice
 // Alice finalTotal: 4 vs. Guard total: (2 + 3) + 1 + 1 = 7 -> outcome === 'failure'
 // duel.actorXpEarned === 1, duel.actor.xp === 1, duel.actor.pendingAdvancement !== null
 // duel.defenderXpEarned === 0, duel.defender.xp === 0
+
+// 3. Predetermined / physical dice on actor, defender, or both (skips diceRoller for supplied sides)
+const tabletopDuel = alice
+  .makeCheck('Do Anything')
+  .withDiceValues([6])
+  .againstCharacter(guard, 'Block', (def) => def.withDiceValues([5, 4]))
+  .roll(new StubDiceRoller([]));
+// Alice [6] vs. Guard [5, 4] = 9 -> Alice fails (+1 XP) AND earns 0-XP natural-6 pendingAdvancement
 ```
 
 ### Claiming or Dismissing `pendingAdvancement`
@@ -476,11 +484,13 @@ export class CharacterCheckBuilder {
     actionDescription?: string,
     tiesMode?: TiesMode,
     modifiers?: readonly CheckModifier[],
+    diceValues?: readonly DieValue[],
   );
 
   withAction(description: string): CharacterCheckBuilder;
   withStatus(statusIdOrName: string): CharacterCheckBuilder;
   withModifier(label: string, value: number): CharacterCheckBuilder;
+  withDiceValues(dice: readonly DieValue[]): CharacterCheckBuilder;
   withTiesMode(tiesMode: TiesMode): CharacterCheckBuilder;
 
   against(opposition: CheckOpposition): ReadyCharacterCheck;
@@ -496,10 +506,13 @@ export class CharacterCheckBuilder {
 - **`withStatus(statusIdOrName)`**: Resolves an attached `Status` on the actor by exact `id` or case-insensitive `name` and appends `{ label: status.name, value: status.rating }`.
   - **`@throws {Error}`**: If the actor does not have a matching status.
 - **`withModifier(label, value)`**: Appends an ad-hoc `CheckModifier` (`{ label, value }`).
+- **`withDiceValues(dice)`**: Supplies predetermined physical `d6` values for the actor's pool (validated against `skillUsed.level` and frozen).
+  - **`@throws {RangeError}`**: If `dice.length !== skillUsed.level` or any element fails `isDieValue`.
 - **`withTiesMode(tiesMode)`**: Sets `'fail'` (default) or `'twist'`.
 - **`against(opposition)`**: Binds a `CheckOpposition` (`StaticOpposition`, `RolledOpposition`, or `DifficultyOpposition`) and returns [`ReadyCharacterCheck`](#readycharactercheck).
-- **`againstCharacter(defender, defenderSkillIdOrName, configureDefender?)`**: Resolves `defender.skill(defenderSkillIdOrName)` and optional defender statuses/modifiers via [`OpposedParticipantBuilder`](#opposedparticipantbuilder), returning [`ReadyOpposedCharacterCheck`](#readyopposedcharactercheck).
+- **`againstCharacter(defender, defenderSkillIdOrName, configureDefender?)`**: Resolves `defender.skill(defenderSkillIdOrName)` and optional defender statuses, modifiers, and physical `diceValues` via [`OpposedParticipantBuilder`](#opposedparticipantbuilder), returning [`ReadyOpposedCharacterCheck`](#readyopposedcharactercheck).
   - **`@throws {Error}`**: If `defenderSkillIdOrName` is not found on `defender`, or if `configureDefender` references an unknown status on `defender`.
+  - **`@throws {RangeError}`**: If `configureDefender` passes invalid or wrong-length `diceValues` for `defenderSkill.level`.
 
 ---
 
@@ -509,16 +522,24 @@ Immutable fluent builder passed to `againstCharacter`'s `configureDefender` call
 
 ```ts
 export class OpposedParticipantBuilder {
-  constructor(defender: Character, modifiers?: readonly CheckModifier[]);
+  constructor(
+    defender: Character,
+    skillLevel: number,
+    modifiers?: readonly CheckModifier[],
+    diceValues?: readonly DieValue[],
+  );
 
   withStatus(statusIdOrName: string): OpposedParticipantBuilder;
   withModifier(label: string, value: number): OpposedParticipantBuilder;
+  withDiceValues(dice: readonly DieValue[]): OpposedParticipantBuilder;
 }
 ```
 
 - **`withStatus(statusIdOrName)`**: Looks up `statusIdOrName` on `defender` (by exact `id` or case-insensitive `name`) and appends `{ label: status.name, value: status.rating }`.
   - **`@throws {Error}`**: If `defender` does not have a matching status.
 - **`withModifier(label, value)`**: Appends an ad-hoc `{ label, value }` modifier to the defender's pool.
+- **`withDiceValues(dice)`**: Supplies predetermined physical `d6` values for the defender's pool (validated against `skillLevel` and frozen).
+  - **`@throws {RangeError}`**: If `dice.length !== skillLevel` or any element fails `isDieValue`.
 
 ---
 
@@ -535,6 +556,7 @@ export class ReadyCharacterCheck {
     actionDescription: string | undefined,
     tiesMode: TiesMode,
     modifiers: readonly CheckModifier[],
+    diceValues?: readonly DieValue[],
   );
 
   withTiesMode(tiesMode: TiesMode): ReadyCharacterCheck;
@@ -543,8 +565,8 @@ export class ReadyCharacterCheck {
 ```
 
 - **`withTiesMode(tiesMode)`**: Returns a new `ReadyCharacterCheck` with `tiesMode` overridden.
-- **`roll(diceRoller)`**: Rolls the actor's `skillUsed.level` `d6`s **first**, resolves `opposition.resolve(diceRoller)` **second**, updates `xp` (`+1` on `'failure'`, `0` otherwise) and `pendingAdvancement`, and returns [`CharacterCheckOutcome`](#charactercheckoutcome).
-  - **`@throws {Error}`**: If `diceRoller` (such as `StubDiceRoller`) is exhausted during actor or opposition rolls.
+- **`roll(diceRoller)`**: Resolves the actor's `skillUsed.level` `d6`s **first** (using `diceValues` if provided, otherwise rolling `diceRoller`) and `opposition.resolve(diceRoller)` **second**, updates `xp` (`+1` on `'failure'`, `0` otherwise) and `pendingAdvancement`, and returns [`CharacterCheckOutcome`](#charactercheckoutcome).
+  - **`@throws {Error}`**: If `diceRoller` (such as `StubDiceRoller`) is exhausted during any non-predetermined actor or opposition roll.
 
 ---
 
@@ -559,10 +581,11 @@ export class ReadyOpposedCharacterCheck {
     actorSkill: Skill,
     defender: Character,
     defenderSkill: Skill,
+    defenderOpposition: RolledOpposition,
     actionDescription: string | undefined,
     tiesMode: TiesMode,
     actorModifiers: readonly CheckModifier[],
-    defenderModifiers: readonly CheckModifier[],
+    actorDiceValues?: readonly DieValue[],
   );
 
   withTiesMode(tiesMode: TiesMode): ReadyOpposedCharacterCheck;
@@ -571,8 +594,8 @@ export class ReadyOpposedCharacterCheck {
 ```
 
 - **`withTiesMode(tiesMode)`**: Returns a new `ReadyOpposedCharacterCheck` with `tiesMode` overridden.
-- **`roll(diceRoller)`**: Rolls `actorSkill.level` `d6`s **first** and `defenderSkill.level` `d6`s **second** via `RolledOpposition`, independently updates both characters' `xp` and `pendingAdvancement` (`'tie'` -> `0 XP` each; actor `'success'` -> `+1 XP` to defender; actor `'failure'` -> `+1 XP` to actor), and returns [`OpposedCharacterCheckOutcome`](#opposedcharactercheckoutcome).
-  - **`@throws {Error}`**: If `diceRoller` (such as `StubDiceRoller`) has insufficient queued dice.
+- **`roll(diceRoller)`**: Resolves `actorSkill.level` `d6`s **first** (using `actorDiceValues` if provided, otherwise rolling `diceRoller`) and `defenderOpposition.resolve(diceRoller)` **second** (using defender `diceValues` if provided, otherwise rolling `defenderSkill.level` `d6`s), independently updates both characters' `xp` and `pendingAdvancement` (`'tie'` -> `0 XP` each; actor `'success'` -> `+1 XP` to defender; actor `'failure'` -> `+1 XP` to actor), and returns [`OpposedCharacterCheckOutcome`](#opposedcharactercheckoutcome).
+  - **`@throws {Error}`**: If `diceRoller` (such as `StubDiceRoller`) has insufficient queued dice for any non-predetermined roll.
 
 ---
 

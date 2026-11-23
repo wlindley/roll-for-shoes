@@ -132,6 +132,7 @@ ws = check1.workspace;
 
 // 3. Opposed character-vs-character check (actor rolls first [5], defender rolls second [6]):
 // Updates both characters in roster order and logs defender metadata
+// (Chain .withDiceValues([...]) on actor or defender to enter physical tabletop dice instead)
 const check2 = ws.activeCampaign
   .character('Bob')
   .makeCheck('Do Anything')
@@ -451,6 +452,7 @@ export class ScopedCheckBuilder<TRoot> {
   withAction(description: string): ScopedCheckBuilder<TRoot>;
   withStatus(statusIdOrName: string): ScopedCheckBuilder<TRoot>;
   withModifier(label: string, value: number): ScopedCheckBuilder<TRoot>;
+  withDiceValues(dice: readonly DieValue[]): ScopedCheckBuilder<TRoot>;
 
   against(opposition: CheckOpposition): {
     roll(diceRoller: DiceRoller): TRoot & { readonly outcome: CharacterCheckOutcome };
@@ -471,19 +473,22 @@ export class ScopedCheckBuilder<TRoot> {
   - `@throws {Error}` (`"Statuses are disabled in this campaign"`) if `!campaign.rules.statusesEnabled`.
   - `@throws {Error}` (`"Status not found: <statusIdOrName>"`) if the actor does not have the status.
 - **`withModifier(label, value)`**: Appends an ad-hoc situational modifier (`{ label, value }`) regardless of `statusesEnabled`.
+- **`withDiceValues(dice)`**: Supplies predetermined physical `d6` values for the actor's skill pool (skipping `diceRoller` for the actor).
+  - `@throws {RangeError}` if `dice.length !== skillUsed.level` or any face fails `isDieValue`.
 - **`against(opposition)`**: Binds any polymorphic [`CheckOpposition`](../checks/index.ts) (`StaticOpposition`, `RolledOpposition`, `DifficultyOpposition`). Calling `.roll(diceRoller)`:
-  1. Rolls the actor's skill pool first and `opposition.resolve(diceRoller)` second.
+  1. Resolves the actor's skill pool first and `opposition.resolve(diceRoller)` second.
   2. Updates the actor in `campaign` (`+1 XP` on `'failure'`, updating `pendingAdvancement`) and prepends a `'vs_opposition'` `CampaignRollLogEntry` to `campaign.rollLog`.
   3. Returns frozen `TRoot & { readonly outcome: CharacterCheckOutcome }`.
   - `.roll(diceRoller)` `@throws {RangeError | Error}` if `diceRoller` or `opposition.resolve(diceRoller)` fails (e.g., exhausted `StubDiceRoller`).
-- **`againstCharacter(defenderIdOrName, defenderSkillIdOrName, configureDefender?)`**: Resolves an opposed check against another character in the same campaign. Calling `.roll(diceRoller)`:
-  1. Rolls the actor's skill dice first and the defender's skill dice second.
+- **`againstCharacter(defenderIdOrName, defenderSkillIdOrName, configureDefender?)`**: Resolves an opposed check against another character in the same campaign, wrapping `OpposedParticipantBuilder` so `b.withStatus(...)` enforces `campaign.rules.statusesEnabled` across arbitrary chains with `b.withModifier(...)` and `b.withDiceValues(...)`. Calling `.roll(diceRoller)`:
+  1. Resolves the actor's skill dice first and the defender's skill dice second (skipping `diceRoller` on any side supplying `diceValues`).
   2. Updates **both** actor and defender in `campaign.characters` (preserving roster order) and prepends a `'character_opposed'` `CampaignRollLogEntry` to `campaign.rollLog`.
   3. Returns frozen `TRoot & { readonly outcome: OpposedCharacterCheckOutcome }`.
   - `@throws {Error}` (`"Character not found: <defenderIdOrName>"`) if the defender is not in `campaign`.
   - `@throws {Error}` (`"Character cannot oppose themselves: <defender.name>"`) if `defender.id === actorId`.
   - `@throws {Error}` (`"Skill not found: <defenderSkillIdOrName>"`) if the defender lacks the skill.
   - `@throws {Error}` (`"Statuses are disabled in this campaign"` / `"Status not found: ..."`) if `configureDefender` calls `b.withStatus(...)` when statuses are disabled or missing on the defender.
+  - `@throws {RangeError}` if `configureDefender` calls `b.withDiceValues(...)` with a mismatched count or invalid `DieValue`.
   - `.roll(diceRoller)` `@throws {RangeError | Error}` if `diceRoller` fails (e.g., exhausted `StubDiceRoller`).
 
 ---

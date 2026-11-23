@@ -40,10 +40,10 @@ flowchart TD
 | Module | Path | Allowed Internal Imports | Responsibility | Tested? |
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Dice** | `src/dice/` | *(none)* | Defines `DieValue` (`1..6`), `DiceRoll` (computed `total`), and `DiceRoller` (`roll(count)`). Provides `RandomDiceRoller` (cryptographic RNG with injectable byte source) and `StubDiceRoller` (deterministic FIFO queue). | **Yes** (`dice.test.ts`) |
-| **2. Checks** | `src/checks/` | `src/dice` | Fluent `Check` builder, `RolledPool` with computed getters, and polymorphic `CheckOpposition` implementations (`StaticOpposition`, `RolledOpposition`, `DifficultyOpposition`). | **Yes** (`checks.test.ts`) |
+| **2. Checks** | `src/checks/` | `src/dice` | Fluent `Check` builder (rolled or predetermined `diceValues`), `RolledPool` with computed getters, and polymorphic `CheckOpposition` implementations (`StaticOpposition`, `RolledOpposition`, `DifficultyOpposition`). | **Yes** (`checks.test.ts`) |
 | **3. Character** | `src/character/` | `src/dice`, `src/checks` | Immutable `Character` entity with fluent builders (`makeCheck`, `advance`, `Character.builder`), `Skill`, `Status` (`Status.create` / `Status.roll`), `SkillSlotConfig`, optional `portrait`, and versioned JSON serialization. | **Yes** (`character.test.ts`) |
 | **4. Campaign & Storage** | `src/campaign/` | `src/dice`, `src/checks`, `src/character` | Immutable `Workspace` and `Campaign` entities with scoped fluent traversal (`workspace.activeCampaign.character('foo').makeCheck(...)`), roll history, campaign JSON import/export, and `StorageAdapter` (`LocalStorageAdapter` + `MemoryStorageAdapter`). | **Yes** (`campaign.test.ts`) |
-| **5. Browser UI** | `src/ui/` | `src/dice`, `src/checks`, `src/character`, `src/campaign` | Responsive React components rendering a hideable default-closed campaign sidebar (with `Advanced Options` export/import menu), `Campaign Options` menu (`RenameCampaignDialog` + `CampaignSettingsDialog`), wider simultaneous multi-character cards with `64×64` portraits, check builder, post-roll advancement flow, statuses, and skill slots. Wires `RandomDiceRoller` and persistent `LocalStorageAdapter` at application boot. | **No** *(verified via `tsc` & `vite build`)* |
+| **5. Browser UI** | `src/ui/` | `src/dice`, `src/checks`, `src/character`, `src/campaign` | Responsive React components rendering a hideable default-closed campaign sidebar (with `Advanced Options` export/import menu), `Campaign Options` menu (`RenameCampaignDialog` + `CampaignSettingsDialog`), wider simultaneous multi-character cards with `64×64` portraits, check builder (with optional `PhysicalDiceInput`), post-roll advancement flow, statuses, and skill slots. Wires `RandomDiceRoller` and persistent `LocalStorageAdapter` at application boot. | **No** *(verified via `tsc` & `vite build`)* |
 
 ---
 
@@ -130,6 +130,7 @@ roll_for_shoes/
             ├── CharacterCard.tsx
             ├── CreateCharacterDialog.tsx
             ├── CheckRollerPanel.tsx
+            ├── PhysicalDiceInput.tsx
             ├── AdvancementPrompt.tsx
             ├── StatusManager.tsx
             ├── SkillSlotBar.tsx
@@ -190,5 +191,5 @@ Derived values are never persisted or stored as redundant fields alongside sourc
    - `src/campaign/campaign.test.ts` -> `src/campaign/index.ts` + real `src/character` + real `src/checks` + real `src/dice` + real `MemoryStorageAdapter` & `LocalStorageAdapter`
 2. **Minimal Implementation for High Coverage**: `rfs-implementer` writes only the code necessary to pass tests cleanly, verified via Vitest coverage (`@vitest/coverage-v8`).
 3. **Only Dice May Be Stubbed**: Only `StubDiceRoller` (plus `RandomDiceRoller`'s optional byte-source callback inside `dice.test.ts`) is ever faked. Zero `vi.mock`, `vi.fn`, or `vi.spyOn` on `checks`, `character`, `campaign`, or `StorageAdapter`.
-4. **Deterministic Roll Order**: Actor dice are always rolled first; `opposition.resolve(diceRoller)` always runs second.
+4. **Deterministic Roll Order**: Actor dice are always resolved first and `opposition.resolve(diceRoller)` always runs second (skipping `diceRoller.roll(...)` on any side that supplies predetermined `diceValues`).
 5. **UI Verification**: `src/ui/` is verified via `npm run typecheck`, `npm run build`, and existing domain `npm test` suites.

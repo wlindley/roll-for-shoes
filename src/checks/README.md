@@ -10,27 +10,27 @@ Stateless, immutable check resolution engine for [Roll for Shoes](../../referenc
 
 - **Strict Downward DAG Position**: Occupies Layer 2 of the [module dependency graph](../../docs/architecture.md#2-module-dependency-graph). It imports **only** from [`../dice`](../dice/index.ts) (`DiceRoller` and `DieValue`) and exposes its public contract exclusively through [`./index.ts`](./index.ts) for downstream modules ([`../character`](../character/index.ts), [`../campaign`](../campaign/index.ts), and `../ui`).
 - **Fluent Immutable Pipeline (`Check` -> `ReadyCheck` -> `CheckResult`)**:
-  1. `Check.withDice(diceCount)` validates the actor's pool size and starts a frozen builder where actor modifiers (`.withModifier()`, `.withModifiers()`) and tie behavior (`.withTiesMode()`) can be configured.
-  2. `.against(opposition)` binds a `CheckOpposition` and returns a frozen `ReadyCheck` (which still accepts `.withModifier()`, `.withModifiers()`, and `.withTiesMode()` overrides).
-  3. `.resolve(diceRoller)` rolls dice and returns a `CheckResult` exposing `actor`, `opposition`, `tiesMode`, and computed `margin` and `outcome` getters. Every builder step returns a **new** instance (`next !== prev`) and clones/freezes modifier arrays so shared builders never mutate.
+  1. `Check.withDice(diceCount)` (or `Check.fromDice(dice)` for physical dice) validates the actor's pool size and starts a frozen builder where predetermined dice (`.withDiceValues()`), actor modifiers (`.withModifier()`, `.withModifiers()`), and tie behavior (`.withTiesMode()`) can be configured.
+  2. `.against(opposition)` binds a `CheckOpposition` and returns a frozen `ReadyCheck` (which still accepts `.withDiceValues()`, `.withModifier()`, `.withModifiers()`, and `.withTiesMode()` overrides).
+  3. `.resolve(diceRoller)` rolls dice (or uses predetermined `diceValues` without touching `diceRoller`) and returns a `CheckResult` exposing `actor`, `opposition`, `tiesMode`, and computed `margin` and `outcome` getters. Every builder step returns a **new** instance (`next !== prev`) and clones/freezes dice and modifier arrays so shared builders never mutate.
 - **Polymorphic `CheckOpposition` (Open/Closed Principle)**: `Check` and `ReadyCheck` depend solely on the narrow `CheckOpposition` interface (`resolve(diceRoller): OppositionResult`) rather than branching on type tags. Three built-in implementations cover every opposition mode in the game:
   - `StaticOpposition` — fixed numeric threshold; consumes `0` dice from `diceRoller`.
-  - `RolledOpposition` — opposing `d6` pool with optional additive modifiers (e.g., an NPC or rival roll).
-  - `DifficultyOpposition` — named GM difficulty tier (`DifficultyTier.Easy = 1` .. `DifficultyTier.VeryHard = 4`) resolved as either `'static'` (`tier * 3`, `0` dice rolled) or `'dynamic'` (`tier`d6 rolled), plus optional modifiers. Custom `CheckOpposition` implementations can be supplied without modifying `Check` or `ReadyCheck`.
+  - `RolledOpposition` — opposing `d6` pool (rolled or predetermined via `RolledOpposition.fromDice` / `.withDiceValues()`) with optional additive modifiers (e.g., an NPC or rival roll).
+  - `DifficultyOpposition` — named GM difficulty tier (`DifficultyTier.Easy = 1` .. `DifficultyTier.VeryHard = 4`) resolved as either `'static'` (`tier * 3`, `0` dice rolled; rejects `diceValues`) or `'dynamic'` (`tier`d6 rolled or predetermined via `.withDiceValues()`), plus optional modifiers. Custom `CheckOpposition` implementations can be supplied without modifying `Check` or `ReadyCheck`.
 - **Computed `RolledPool` Getters (DRY / Single Source of Truth)**: `RolledPool` stores only frozen `rawDice` and `modifiers` arrays and computes every derived metric via getters:
   - `rawTotal` (sum of `rawDice`), `modifierTotal` (sum of `modifiers`), and `finalTotal` (`rawTotal + modifierTotal`, which may be `0` or negative under heavy penalties).
   - `nonSixCount` (dice in `rawDice` not showing `6`, equal to the XP upgrade cost for advancement) and `naturalAllSixes` (`rawDice.length > 0 && nonSixCount === 0`). Because advancement in Roll for Shoes is governed strictly by rolled dice, `nonSixCount` and `naturalAllSixes` are **completely unaffected by modifiers**.
 - **Configurable `TiesMode` (`'fail'` vs. `'twist'`)**:
   - `'fail'` *(Basic Rules default)*: Actor must strictly beat the opposition (`margin > 0`), so equal totals (`margin === 0`) resolve to `'failure'`.
   - `'twist'` *(Advanced Ties rule)*: Equal totals (`margin === 0`) resolve to `'tie'` (partial success with an unexpected twist or minor consequence; awards `0 XP` in [`../character`](../character/index.ts)). Strict wins (`margin > 0`) and strict losses (`margin < 0`) remain `'success'` and `'failure'`.
-- **Deterministic Roll Ordering**: `ReadyCheck.resolve(diceRoller)` **always** rolls the actor's dice pool **first** (`diceRoller.roll(actorDiceCount)`) and resolves `opposition.resolve(diceRoller)` **second**. This guarantees deterministic FIFO consumption when testing with `StubDiceRoller` across [`./checks.test.ts`](./checks.test.ts) and all higher modules.
+- **Deterministic Roll Ordering**: `ReadyCheck.resolve(diceRoller)` **always** resolves the actor's dice pool **first** (`this.diceValues ?? diceRoller.roll(actorDiceCount).dice`) and `opposition.resolve(diceRoller)` **second**. Any side supplying predetermined `diceValues` skips `diceRoller.roll(...)`, preserving deterministic FIFO consumption when testing with `StubDiceRoller` across [`./checks.test.ts`](./checks.test.ts) and all higher modules.
 
 ### Module Files
 
 | File | Responsibility |
 | :--- | :--- |
 | [`./index.ts`](./index.ts) | Public module entrypoint re-exporting all types, enums, interfaces, and classes. |
-| [`./types.ts`](./types.ts) | `CheckOutcome`, `TiesMode`, `DifficultyTier`, `CheckModifier`, dice-count validation, and modifier deep-freezing. |
+| [`./types.ts`](./types.ts) | `CheckOutcome`, `TiesMode`, `DifficultyTier`, `CheckModifier`, dice-count/face validation (`freezeDiceValues`), and modifier deep-freezing. |
 | [`./rolled-pool.ts`](./rolled-pool.ts) | Immutable `RolledPool` class and computed dice/modifier getters. |
 | [`./opposition.ts`](./opposition.ts) | `CheckOpposition`, `OppositionResult`, `StaticOpposition`, `RolledOpposition`, and `DifficultyOpposition`. |
 | [`./check.ts`](./check.ts) | Fluent `Check` and `ReadyCheck` builders and `CheckResult` outcome adjudication. |
@@ -205,6 +205,30 @@ result.tiesMode;         // 'twist'
 result.outcome;          // 'tie' (barely succeeds with a twist; 0 XP)
 ```
 
+### Physical / Predetermined Dice Values (`fromDice` & `withDiceValues`)
+
+When players or the GM roll physical tabletop dice, supply exact `DieValue` (`1..6`) arrays on the actor, opposition, or both—skipping `diceRoller` for any predetermined pool:
+
+```ts
+import { StubDiceRoller } from '../dice';
+import { Check, DifficultyOpposition, DifficultyTier, RolledOpposition } from '../checks';
+
+// Both sides enter physical dice: consumes 0 random rolls
+const bothPhysical = Check.fromDice([6, 4])
+  .against(RolledOpposition.fromDice([5, 5], { label: 'Rival' }))
+  .withTiesMode('twist')
+  .resolve(new StubDiceRoller([]));
+
+bothPhysical.actor.rawDice;            // [6, 4]
+bothPhysical.opposition.pool?.rawDice; // [5, 5]
+bothPhysical.outcome;                  // 'tie'
+
+// Dynamic DifficultyOpposition also accepts physical dice matching `tier`:
+const chasm = new DifficultyOpposition(DifficultyTier.Moderate, 'dynamic', { label: 'Chasm' })
+  .withDiceValues([6, 2])
+  .withModifier('Windy', 1); // 8 + 1 = 9
+```
+
 ---
 
 ## 3. Public Interface Reference
@@ -332,23 +356,39 @@ export class StaticOpposition implements CheckOpposition {
 export class RolledOpposition implements CheckOpposition {
   readonly diceCount: number;
   readonly modifiers: readonly CheckModifier[];
+  readonly diceValues?: readonly DieValue[];
   readonly label?: string;
 
   constructor(
     diceCount: number,
-    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+    options?: {
+      readonly modifiers?: readonly CheckModifier[];
+      readonly label?: string;
+      readonly diceValues?: readonly DieValue[];
+    },
   );
 
+  static fromDice(
+    dice: readonly DieValue[],
+    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+  ): RolledOpposition;
+
+  withDiceValues(dice: readonly DieValue[]): RolledOpposition;
   withModifier(label: string, value: number): RolledOpposition;
   resolve(diceRoller: DiceRoller): OppositionResult;
 }
 ```
 
-- **`constructor(diceCount, options?)`**: Clones and freezes `options?.modifiers` (defaults to `[]`) and stores `options?.label`.
+- **`constructor(diceCount, options?)`**: Clones and freezes `options?.modifiers` (defaults to `[]`), validates and freezes optional `options?.diceValues`, and stores `options?.label`.
   - `@throws {RangeError}` (`Dice count must be a positive integer, received ...`) if `!Number.isInteger(diceCount)` or `diceCount < 1` (rejects `0`, negative numbers, decimals, `NaN`, and `±Infinity`).
-- **`withModifier(label, value)`**: Returns a **new** `RolledOpposition` with `{ label, value }` appended to `this.modifiers` and `this.label` preserved.
-- **`resolve(diceRoller)`**: Calls `diceRoller.roll(this.diceCount)`, wraps `dice` and `this.modifiers` in a `RolledPool`, and returns a frozen `{ total: pool.finalTotal, pool, label: this.label }`.
-  - `@throws {Error}` if `diceRoller` fails (e.g., `StubDiceRoller` queue exhausted).
+  - `@throws {RangeError}` if `options?.diceValues` has length `!== diceCount` or contains a non-`DieValue` face.
+- **`static fromDice(dice, options?)`**: Convenience factory equivalent to `new RolledOpposition(dice.length, { ...options, diceValues: dice })`.
+  - `@throws {RangeError}` if `dice.length < 1` or any element fails `isDieValue`.
+- **`withDiceValues(dice)`**: Returns a **new** frozen `RolledOpposition` with `diceValues` validated (`dice.length === this.diceCount`) and frozen, preserving `modifiers` and `label`.
+  - `@throws {RangeError}` if `dice.length !== this.diceCount` or any element fails `isDieValue`.
+- **`withModifier(label, value)`**: Returns a **new** `RolledOpposition` with `{ label, value }` appended to `this.modifiers` and `this.label` and `this.diceValues` preserved.
+- **`resolve(diceRoller)`**: Uses `this.diceValues` when present (consuming **0 dice** from `diceRoller`) or calls `diceRoller.roll(this.diceCount).dice`, wraps the dice and `this.modifiers` in a `RolledPool`, and returns a frozen `{ total: pool.finalTotal, pool, label: this.label }`.
+  - `@throws {Error}` if `this.diceValues` is `undefined` and `diceRoller` fails (e.g., `StubDiceRoller` queue exhausted).
 
 #### `DifficultyOpposition`
 
@@ -357,26 +397,37 @@ export class DifficultyOpposition implements CheckOpposition {
   readonly tier: DifficultyTier;
   readonly mode: 'static' | 'dynamic';
   readonly modifiers: readonly CheckModifier[];
+  readonly diceValues?: readonly DieValue[];
   readonly label?: string;
 
   constructor(
     tier: DifficultyTier,
     mode?: 'static' | 'dynamic',
-    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+    options?: {
+      readonly modifiers?: readonly CheckModifier[];
+      readonly label?: string;
+      readonly diceValues?: readonly DieValue[];
+    },
   );
 
+  withDiceValues(dice: readonly DieValue[]): DifficultyOpposition;
   withModifier(label: string, value: number): DifficultyOpposition;
   resolve(diceRoller: DiceRoller): OppositionResult;
 }
 ```
 
-- **`constructor(tier, mode = 'static', options?)`**: Defaults `mode` to `'static'`, clones and deep-freezes `options?.modifiers` (defaults to `[]`), sets `label`, and freezes the instance (`Object.freeze(this)`).
-- **`withModifier(label, value)`**: Returns a **new** frozen `DifficultyOpposition` preserving `tier`, `mode`, and `label` with `{ label, value }` appended to `this.modifiers`.
+- **`constructor(tier, mode = 'static', options?)`**: Defaults `mode` to `'static'`, clones and deep-freezes `options?.modifiers` (defaults to `[]`), validates/freezes optional `options?.diceValues` (when `mode === 'dynamic'`), sets `label`, and freezes the instance (`Object.freeze(this)`).
+  - `@throws {Error}` (`Cannot supply dice values for static difficulty opposition`) if `options?.diceValues` is provided while `mode === 'static'`.
+  - `@throws {RangeError}` if `options?.diceValues` is provided in `'dynamic'` mode with `dice.length !== tier` or any invalid `DieValue`.
+- **`withDiceValues(dice)`**: Returns a **new** frozen `DifficultyOpposition` with predetermined `diceValues` (`dice.length === this.tier`).
+  - `@throws {Error}` if `this.mode === 'static'`.
+  - `@throws {RangeError}` if `dice.length !== this.tier` or any element fails `isDieValue`.
+- **`withModifier(label, value)`**: Returns a **new** frozen `DifficultyOpposition` preserving `tier`, `mode`, `label`, and `diceValues` with `{ label, value }` appended to `this.modifiers`.
 - **`resolve(diceRoller)`**:
   - When `mode === 'static'`: Consumes **0 dice** from `diceRoller` and returns a frozen `{ total: this.tier * 3 + modifierTotal, label: this.label }` (`pool` is `undefined`).
-  - When `mode === 'dynamic'`: Calls `diceRoller.roll(this.tier)`, builds `pool = new RolledPool(dice, this.modifiers)`, and returns a frozen `{ total: pool.finalTotal, pool, label: this.label }`.
-  - `@throws {RangeError}` in `'dynamic'` mode if `diceRoller.roll(this.tier)` rejects a coerced invalid `tier` (`< 1` or non-integer).
-  - `@throws {Error}` in `'dynamic'` mode if a `StubDiceRoller` has fewer than `this.tier` dice remaining.
+  - When `mode === 'dynamic'`: Uses `this.diceValues` when present (consuming **0 dice** from `diceRoller`) or calls `diceRoller.roll(this.tier).dice`, builds `pool = new RolledPool(rawDice, this.modifiers)`, and returns a frozen `{ total: pool.finalTotal, pool, label: this.label }`.
+  - `@throws {RangeError}` in `'dynamic'` mode (without `diceValues`) if `diceRoller.roll(this.tier)` rejects a coerced invalid `tier` (`< 1` or non-integer).
+  - `@throws {Error}` in `'dynamic'` mode (without `diceValues`) if a `StubDiceRoller` has fewer than `this.tier` dice remaining.
 
 ---
 
@@ -387,7 +438,9 @@ export class DifficultyOpposition implements CheckOpposition {
 ```ts
 export class Check {
   static withDice(diceCount: number): Check;
+  static fromDice(dice: readonly DieValue[]): Check;
 
+  withDiceValues(dice: readonly DieValue[]): Check;
   withModifier(label: string, value: number): Check;
   withModifiers(modifiers: readonly CheckModifier[]): Check;
   withTiesMode(tiesMode: TiesMode): Check;
@@ -395,14 +448,18 @@ export class Check {
 }
 ```
 
-Immutable builder with a `private` constructor (always instantiate via `Check.withDice(diceCount)`). Every instance is frozen with `Object.freeze(this)`.
+Immutable builder with a `private` constructor (instantiate via `Check.withDice(diceCount)` or `Check.fromDice(dice)`). Every instance is frozen with `Object.freeze(this)`.
 
 - **`static withDice(diceCount)`**: Starts a check rolling `diceCount` d6s for the actor with no modifiers and default tie handling (`'fail'` unless overridden).
   - `@throws {RangeError}` (`Dice count must be a positive integer, received ...`) if `!Number.isInteger(diceCount)` or `diceCount < 1`.
+- **`static fromDice(dice)`**: Starts a check with predetermined physical actor `dice` (`Check.withDice(dice.length).withDiceValues(dice)`).
+  - `@throws {RangeError}` if `dice.length < 1` or any element fails `isDieValue`.
+- **`withDiceValues(dice)`**: Returns a **new** frozen `Check` with `dice` validated (`dice.length === this.diceCount`) and frozen as the actor's predetermined dice.
+  - `@throws {RangeError}` if `dice.length !== this.diceCount` or any element fails `isDieValue`.
 - **`withModifier(label, value)`**: Returns a **new** frozen `Check` with `{ label, value }` appended to actor modifiers.
 - **`withModifiers(modifiers)`**: Returns a **new** frozen `Check` with `modifiers` cloned, frozen, and appended in order.
 - **`withTiesMode(tiesMode)`**: Returns a **new** frozen `Check` with `tiesMode` set to `'fail'` or `'twist'`.
-- **`against(opposition)`**: Binds `opposition` and returns a **new** frozen `ReadyCheck` carrying over `diceCount`, `modifiers`, and `tiesMode`.
+- **`against(opposition)`**: Binds `opposition` and returns a **new** frozen `ReadyCheck` carrying over `diceCount`, `modifiers`, `tiesMode`, and `diceValues`.
 
 #### `ReadyCheck`
 
@@ -413,8 +470,10 @@ export class ReadyCheck {
     opposition: CheckOpposition,
     modifiers: readonly CheckModifier[],
     tiesMode?: TiesMode,
+    diceValues?: readonly DieValue[],
   );
 
+  withDiceValues(dice: readonly DieValue[]): ReadyCheck;
   withModifier(label: string, value: number): ReadyCheck;
   withModifiers(modifiers: readonly CheckModifier[]): ReadyCheck;
   withTiesMode(tiesMode: TiesMode): ReadyCheck;
@@ -422,14 +481,16 @@ export class ReadyCheck {
 }
 ```
 
-Immutable, frozen check bound to a `CheckOpposition` (typically produced via `Check.withDice(n).against(opposition)`).
+Immutable, frozen check bound to a `CheckOpposition` (typically produced via `Check.withDice(n).against(opposition)` or `Check.fromDice(dice).against(opposition)`).
 
-- **`constructor(diceCount, opposition, modifiers, tiesMode?)`**: Clones and deep-freezes `modifiers` and freezes the instance (`Object.freeze(this)`).
+- **`constructor(diceCount, opposition, modifiers, tiesMode?, diceValues?)`**: Clones and deep-freezes `modifiers` and freezes the instance (`Object.freeze(this)`).
+- **`withDiceValues(dice)`**: Returns a **new** frozen `ReadyCheck` with `dice` validated (`dice.length === this.diceCount`) and frozen as the actor's predetermined dice.
+  - `@throws {RangeError}` if `dice.length !== this.diceCount` or any element fails `isDieValue`.
 - **`withModifier(label, value)`**: Returns a **new** frozen `ReadyCheck` with `{ label, value }` appended to actor modifiers.
 - **`withModifiers(modifiers)`**: Returns a **new** frozen `ReadyCheck` with `modifiers` cloned, frozen, and appended in order.
 - **`withTiesMode(tiesMode)`**: Returns a **new** frozen `ReadyCheck` with `tiesMode` set to `'fail'` or `'twist'`.
 - **`resolve(diceRoller)`**: Executes the check in strict two-step order:
-  1. Rolls actor dice **first**: `new RolledPool(diceRoller.roll(this.diceCount).dice, this.modifiers)`.
+  1. Resolves actor dice **first**: `new RolledPool(this.diceValues ?? diceRoller.roll(this.diceCount).dice, this.modifiers)`.
   2. Resolves opposition **second**: `this.opposition.resolve(diceRoller)`.
   3. Returns `new CheckResult(actor, opposition, this.tiesMode)`.
   - `@throws {RangeError}` from `diceRoller.roll(...)` if `ReadyCheck` was constructed directly with an invalid `diceCount` (`< 1` or non-integer) or dynamic `tier`.

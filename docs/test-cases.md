@@ -103,6 +103,16 @@ Every automated test imports solely through public `index.ts` entrypoints. **Onl
 | `CHK-STS-10` | Multiple opponent modifiers combine additively (including negative `opposition.total` and on `DifficultyOpposition`) | `[1, 2]` | `new DifficultyOpposition(DifficultyTier.Easy, 'dynamic', { modifiers: [{ label: 'Rusty', value: -5 }, { label: 'Oil', value: 1 }] })` | Opponent `rawTotal: 2`, `modifierTotal: -4`, `opposition.total: -2`; actor `1 > -2` -> `outcome: 'success'`. |
 | `CHK-STS-11` | Simultaneous actor & opponent modifiers on the same opposed check | `[4, 5]` | Actor `+3`, Opponent `+1` | Actor `7` vs Opponent `6` -> `outcome: 'success'`, `margin: 1`. |
 
+### 2.5 Physical / Predetermined Dice Values (`[Commit 41]`)
+
+| Case ID | Scenario | Stubbed Dice | Fluent Call | Expected Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| `CHK-MAN-01` | Actor physical dice (`Check.fromDice`, `Check.withDiceValues`, `ReadyCheck.withDiceValues`) skip `diceRoller` for actor | `[3, 4]`, `[]` | `Check.fromDice([6, 2]).withModifier('Focus', 1).withTiesMode('twist').against(new RolledOpposition(2)).resolve(roller)` (+ `Check.withDice(2).withDiceValues([5, 5])` & `ReadyCheck.withDiceValues([6, 6])`) | Uses predetermined actor dice without consuming actor rolls (`roller.remaining === 0`), preserving modifiers, `tiesMode`, `naturalAllSixes`, and builder immutability. |
+| `CHK-MAN-02` | Opposition physical dice (`RolledOpposition.fromDice` & `withDiceValues`) skip `diceRoller` for opposition | `[6, 3]` | `Check.withDice(2).against(RolledOpposition.fromDice([4, 5], { label: 'Rival' }).withModifier('Shield', 1)).resolve(roller)` | Actor rolls `[6, 3]` (`9`), opposition uses `[4, 5]` + `1` (`10`) without consuming extra dice (`roller.remaining === 0`), `outcome: 'failure'`, and `withDiceValues` returns a distinct frozen instance. |
+| `CHK-MAN-03` | Resolves with zero random rolls when both actor and opposition supply physical dice | `[]` | `Check.fromDice([6, 4]).against(new RolledOpposition(2).withDiceValues([5, 5])).withTiesMode('twist').resolve(emptyRoller)` | `actor.rawDice: [6, 4]`, `opposition.pool.rawDice: [5, 5]`, `outcome: 'tie'`, `emptyRoller.remaining === 0`. |
+| `CHK-MAN-04` | `DifficultyOpposition` supports physical dice in `'dynamic'` mode and rejects them in `'static'` mode | `[]` | `new DifficultyOpposition(DifficultyTier.Moderate, 'dynamic', { label: 'Chasm' }).withDiceValues([6, 2]).withModifier('Windy', 1)` vs `new DifficultyOpposition(DifficultyTier.Easy, 'static').withDiceValues([4])` | Dynamic mode resolves `[6, 2]` + `1` = `9` without rolling; static mode throws `Error` matching `/static/i`. |
+| `CHK-MAN-05` | Validates physical dice count and `1..6` integer face values | *(none)* | Empty `[]`, wrong length (`withDice(2).withDiceValues([6])`, `DifficultyTier.Hard` with 2 dice), and faces `0, 7, -1, 2.5, NaN` | Each throws `RangeError`. |
+
 ---
 
 ## 3. Character Module Boundary Cases (`src/character/character.test.ts`)
@@ -206,6 +216,14 @@ All tests use **real `src/checks`** and **`StubDiceRoller`**.
 | `CHR-PORTRAIT-02` | `character.withPortrait(portrait)` sets, replaces, and clears (`null`) immutably, survives state transitions, and rejects blank strings | `[2]` | Set/replace/clear `portrait`, run check/advancement/skill/status/slot updates, and pass `''` / `'   '` | Each `withPortrait` returns `next !== prev`; `portrait` persists across subsequent immutable `Character` updates; blank string throws `Error`. |
 | `CHR-PORTRAIT-03` | `serialize()` / `Character.deserialize()` round-trips with & without `portrait` (including omitted legacy field) and rejects invalid `portrait` payloads | *(none)* | Serialize/deserialize with `portrait`, without `portrait`, with legacy JSON omitting `portrait`, and with `portrait: 123` / `null` / `''` / `'   '` | Preserves/trims valid `portrait` or `undefined`; throws `Error` when `portrait` is non-undefined and non-string or blank. |
 
+### 3.11 Physical / Predetermined Dice Values (`[Commit 42]`)
+
+| Case ID | Scenario | Stubbed Dice | Action | Expected Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| `CHR-MAN-01` | `CharacterCheckBuilder.withDiceValues` resolves actor physical dice, XP, and `pendingAdvancement` without rolling actor dice | `[]`, `[5, 5]` | `alice.makeCheck('Parkour').withDiceValues([6, 6]).withAction('Vault').against(new StaticOpposition(10)).roll(emptyRoller)` -> `.advance('Rooftop Vault').claim()`, plus `[6, 2]` vs `RolledOpposition(2)` | Natural `[6, 6]` wins with `0` rolls (`canAdvanceNaturally: true`, `xpCostToAdvance: 0`, unlocks Level 3 skill); failed `[6, 2]` vs `[5, 5]` awards `+1 XP` and sets `canAdvance: true`. |
+| `CHR-MAN-02` | Supports physical dice for actor, defender (`OpposedParticipantBuilder.withDiceValues`), or both on `againstCharacter` opposed checks | `[4, 3]`, `[2, 3]`, `[]` | Exercise actor physical + rolled defender, rolled actor + defender physical (with status & modifier), and both physical (`[6, 5]` vs `[6, 6]`) | Consumes `StubDiceRoller` only for non-manual side (`remaining === 0`), applies statuses/modifiers accurately, and awards XP / natural-`6` `pendingAdvancement` to eligible participant. |
+| `CHR-MAN-03` | Rejects mismatched physical dice counts or invalid face values for actor and defender skills | *(none)* | `Climb 2` with `[6]` or `[7, 2]`; `againstCharacter` `Block 3` with `[4, 4]` | Each throws `RangeError`. |
+
 ---
 
 ## 4. Campaign & Workspace Boundary Cases (`src/campaign/campaign.test.ts`)
@@ -232,7 +250,7 @@ All tests use **real `src/character`**, **real `src/checks`**, **real `MemorySto
 | `CMP-BASIC-09` | `LocalStorageAdapter` (default key & custom key, `save`, `load`, `clear`) | `[6]` | Pass real Web `Storage` instance to `LocalStorageAdapter` -> `ws.save(local)` -> fresh `LocalStorageAdapter` -> `Workspace.load(local)` -> `local.clear()` | Persists JSON under key, restores identical `Workspace`, and `clear()` removes key. |
 | `CMP-BASIC-10` | `campaign.exportJson()`, `Campaign.fromJson()`, `workspace.importCampaign()` (including duplicate-ID collision handling), and `Workspace.deserialize` errors | *(none)* | Export `'Heist'`, import twice into same `Workspace`; pass invalid JSON/schemaVersion to `Workspace.deserialize` & `Campaign.fromJson` | Both imported campaigns coexist with distinct IDs; invalid JSON throws `Error`. |
 
-### 4.3 Incremental Advanced Rules in `Campaign` & `Workspace` (`[Commits 21, 25–26, 28]`)
+### 4.3 Incremental Advanced Rules & Features in `Campaign` & `Workspace` (`[Commits 21, 25–26, 28, 33, 42]`)
 
 | Case ID | Commit | Scenario | Expected Outcome |
 | :--- | :--- | :--- | :--- |
@@ -241,6 +259,7 @@ All tests use **real `src/character`**, **real `src/checks`**, **real `MemorySto
 | `CMP-START-01` | Commit 26 | `campaign.addCharacter(customChar)` enforces `rules.allowCustomStartingSkills` | Succeeds when `true`; throws rule-disabled `Error` when `false` and character has skills beyond `Do Anything 1`. |
 | `CMP-SLOT-01` | Commit 28 | `workspace.activeCampaign.character(...).advance(...)` automatically supplies `campaign.rules.skillSlots` | Enforces 4/3/2 triangle & `allowSlotPurchase` in slot-limited campaign while leaving `skillSlots: null` campaign unrestricted. |
 | `CMP-PORTRAIT-01` | Commit 33 | `Campaign` & `Workspace` persist character portraits across `addCharacter`, `character().update(c => c.withPortrait(...))`, `LocalStorageAdapter`, and `exportJson` / `importCampaign` | Portrait sets, updates, and clears (`null`) immutably and survives `LocalStorageAdapter` save/load and campaign JSON export/import round-trips. |
+| `CMP-MAN-01` | Commit 42 | `ScopedCheckBuilder.withDiceValues` and defender `OpposedParticipantBuilder.withDiceValues` resolve physical dice, record `rollLog`, and still enforce `rules.statusesEnabled` on chained `.withStatus()` | Rejects defender `.withDiceValues(...).withStatus(...)` when `statusesEnabled === false`; resolves actor & opposition physical dice with `StubDiceRoller([])` and updates XP, `pendingAdvancement`, and `rollLog` when enabled. |
 
 ---
 
@@ -252,3 +271,4 @@ All tests use **real `src/character`**, **real `src/checks`**, **real `MemorySto
 4. **`UI-04` (Character-vs-Character Opposed Roll)**: Pit Character A against Character B in the same campaign and verify both character cards update simultaneously in the grid.
 5. **`UI-05` (Bob's Lost Shoe Full Walkthrough — `reference/rules.md`)**: Walk through Bob's `Climbing 3` Hard dynamic tie (`7` vs `7` -> Twist, `0 XP`), `-4 Raining` descent, `+2 Clean Shoe` bonus & removal, and `-3 Broken Nose` status.
 6. **`UI-06` (Skill Triangle & Slot Leveling)**: Enable Skill Slots on a campaign, fill Level 2 slots (4/4), trigger a 5th Level 2 advancement, and test both replacing an existing Level 2 skill and enabling `allowSlotPurchase` to spend `4 XP` (`2 * 2`) for an extra slot.
+7. **`UI-07` (Physical / Tabletop Dice Entry)**: Enable actor and/or opposition physical dice in `CheckRollerPanel`, select `1..6` faces across GM Dynamic Dice, Dynamic Difficulty, and Character Opposed modes, and verify check resolution, XP awards, advancement prompts, and roll history match the entered physical dice.

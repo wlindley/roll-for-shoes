@@ -75,7 +75,7 @@ export class StubDiceRoller implements DiceRoller {
 
 ---
 
-## Module 2: Check Resolution (`src/checks/index.ts`) — `[Commits 4–5, 20, 23]`
+## Module 2: Check Resolution (`src/checks/index.ts`) — `[Commits 4–5, 20, 23, 41]`
 
 Stateless rules engine using a fluent `Check` builder and polymorphic `CheckOpposition` classes. Imports **only** from `src/dice`.
 
@@ -150,16 +150,30 @@ export class StaticOpposition implements CheckOpposition {
   resolve(diceRoller: DiceRoller): OppositionResult;
 }
 
-/** Opposing dice pool rolling `diceCount` d6s [Commit 5] with optional modifiers [Commit 23]. */
+/** Opposing dice pool rolling `diceCount` d6s [Commit 5] with optional modifiers [Commit 23] or predetermined dice [Commit 41]. */
 export class RolledOpposition implements CheckOpposition {
   readonly diceCount: number;
   readonly modifiers: readonly CheckModifier[];
+  readonly diceValues?: readonly DieValue[];
   readonly label?: string;
 
   constructor(
     diceCount: number,
-    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+    options?: {
+      readonly modifiers?: readonly CheckModifier[];
+      readonly label?: string;
+      readonly diceValues?: readonly DieValue[];
+    },
   );
+
+  /** Creates a `RolledOpposition` using predetermined physical d6 values [Commit 41]. */
+  static fromDice(
+    dice: readonly DieValue[],
+    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+  ): RolledOpposition;
+
+  /** Returns a new `RolledOpposition` with predetermined physical d6 values (`dice.length === diceCount`) [Commit 41]. */
+  withDiceValues(dice: readonly DieValue[]): RolledOpposition;
 
   /** Returns a new `RolledOpposition` with the appended modifier [Commit 23]. */
   withModifier(label: string, value: number): RolledOpposition;
@@ -168,21 +182,28 @@ export class RolledOpposition implements CheckOpposition {
 
 /**
  * Named Difficulty preset (`Easy=1 .. VeryHard=4`) [Commit 20]:
- * - `'static'` mode: threshold is `tier * 3` (plus any modifiers), consuming 0 dice.
- * - `'dynamic'` mode: rolls `tier` d6s into a `RolledPool` (plus any modifiers).
+ * - `'static'` mode: threshold is `tier * 3` (plus any modifiers), consuming 0 dice (`diceValues` rejected with `Error`).
+ * - `'dynamic'` mode: rolls `tier` d6s (or uses predetermined `diceValues`) into a `RolledPool` (plus any modifiers).
  */
 export class DifficultyOpposition implements CheckOpposition {
   readonly tier: DifficultyTier;
   readonly mode: 'static' | 'dynamic';
   readonly modifiers: readonly CheckModifier[];
+  readonly diceValues?: readonly DieValue[];
   readonly label?: string;
 
   constructor(
     tier: DifficultyTier,
     mode?: 'static' | 'dynamic', // defaults to 'static'
-    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+    options?: {
+      readonly modifiers?: readonly CheckModifier[];
+      readonly label?: string;
+      readonly diceValues?: readonly DieValue[];
+    },
   );
 
+  /** Sets predetermined physical d6 values (`dice.length === tier`) when `mode === 'dynamic'`; throws `Error` when `mode === 'static'` [Commit 41]. */
+  withDiceValues(dice: readonly DieValue[]): DifficultyOpposition;
   withModifier(label: string, value: number): DifficultyOpposition;
   resolve(diceRoller: DiceRoller): OppositionResult;
 }
@@ -205,7 +226,11 @@ export class CheckResult {
 export class Check {
   /** Starts building a check rolling `diceCount` d6s for the actor. */
   static withDice(diceCount: number): Check;
+  /** Starts building a check with predetermined physical d6 values (`dice.length >= 1`) [Commit 41]. */
+  static fromDice(dice: readonly DieValue[]): Check;
 
+  /** Overrides the actor pool with predetermined physical d6 values (`dice.length === diceCount`) [Commit 41]. */
+  withDiceValues(dice: readonly DieValue[]): Check;
   withModifier(label: string, value: number): Check;
   withModifiers(modifiers: readonly CheckModifier[]): Check;
   withTiesMode(tiesMode: TiesMode): Check;
@@ -213,13 +238,15 @@ export class Check {
 }
 
 export class ReadyCheck {
+  /** Overrides the actor pool with predetermined physical d6 values (`dice.length === diceCount`) [Commit 41]. */
+  withDiceValues(dice: readonly DieValue[]): ReadyCheck;
   withModifier(label: string, value: number): ReadyCheck;
   withModifiers(modifiers: readonly CheckModifier[]): ReadyCheck;
   withTiesMode(tiesMode: TiesMode): ReadyCheck;
 
   /**
    * Executes the check:
-   * 1. Calls `diceRoller.roll(actorDiceCount)` FIRST.
+   * 1. Uses predetermined actor `diceValues` if set, otherwise calls `diceRoller.roll(actorDiceCount)` FIRST.
    * 2. Calls `opposition.resolve(diceRoller)` SECOND.
    */
   resolve(diceRoller: DiceRoller): CheckResult;
@@ -228,7 +255,7 @@ export class ReadyCheck {
 
 ---
 
-## Module 3: Character Management (`src/character/index.ts`) — `[Commits 6–10, 21, 24, 26–28, 33]`
+## Module 3: Character Management (`src/character/index.ts`) — `[Commits 6–10, 21, 24, 26–28, 33, 42]`
 
 Immutable `Character` entity with member methods and fluent builders for checks, advancement, statuses, starting skills, skill slots, portraits, and serialization. Imports **only** from `src/dice` and `src/checks`.
 
@@ -472,12 +499,16 @@ export class CharacterBuilder {
 export class OpposedParticipantBuilder {
   withStatus(statusIdOrName: string): OpposedParticipantBuilder;
   withModifier(label: string, value: number): OpposedParticipantBuilder;
+  /** Supplies predetermined physical d6 values (`dice.length === defenderSkill.level`) [Commit 42]. */
+  withDiceValues(dice: readonly DieValue[]): OpposedParticipantBuilder;
 }
 
 export class CharacterCheckBuilder {
   withAction(description: string): CharacterCheckBuilder;
   withStatus(statusIdOrName: string): CharacterCheckBuilder;
   withModifier(label: string, value: number): CharacterCheckBuilder;
+  /** Supplies predetermined physical d6 values (`dice.length === skillUsed.level`) [Commit 42]. */
+  withDiceValues(dice: readonly DieValue[]): CharacterCheckBuilder;
   withTiesMode(tiesMode: TiesMode): CharacterCheckBuilder;
 
   against(opposition: CheckOpposition): ReadyCharacterCheck;
@@ -508,12 +539,12 @@ export class CharacterAdvancementBuilder {
 
 ---
 
-## Module 4: Campaign, Workspace & Storage (`src/campaign/index.ts`) — `[Commits 11–14, 21, 25–26, 28]`
+## Module 4: Campaign, Workspace & Storage (`src/campaign/index.ts`) — `[Commits 11–14, 21, 25–26, 28, 42]`
 
 Immutable `Campaign` and `Workspace` classes with fluent scoped traversal (e.g. `workspace.activeCampaign.character('Alice').makeCheck('Climbing').against(new StaticOpposition(6)).roll(diceRoller)`) and pluggable `StorageAdapter` implementations. Imports **only** from `src/dice`, `src/checks`, and `src/character`.
 
 ```ts
-import type { DiceRoller } from '../dice';
+import type { DiceRoller, DieValue } from '../dice';
 import type { CheckOpposition, CheckResult, TiesMode } from '../checks';
 import type {
   AdvancementOutcome,
@@ -689,11 +720,14 @@ export class ScopedCheckBuilder<TRoot> {
   withAction(description: string): ScopedCheckBuilder<TRoot>;
   withStatus(statusIdOrName: string): ScopedCheckBuilder<TRoot>;
   withModifier(label: string, value: number): ScopedCheckBuilder<TRoot>;
+  /** Supplies predetermined physical d6 values (`dice.length === skillUsed.level`) [Commit 42]. */
+  withDiceValues(dice: readonly DieValue[]): ScopedCheckBuilder<TRoot>;
 
   against(opposition: CheckOpposition): {
     roll(diceRoller: DiceRoller): TRoot & { readonly outcome: CharacterCheckOutcome };
   };
 
+  /** Enforces `campaign.rules.statusesEnabled` on `b.withStatus(...)` while preserving `b.withModifier(...)` and `b.withDiceValues(...)`. */
   againstCharacter(
     defenderIdOrName: string,
     defenderSkillIdOrName: string,
@@ -712,7 +746,7 @@ export class ScopedAdvancementBuilder<TRoot> {
 
 ---
 
-## Module 5: Browser UI (`src/ui/`) — `[Commits 15–19, 22, 25–26, 29]`
+## Module 5: Browser UI (`src/ui/`) — `[Commits 15–19, 22, 25–26, 29, 31, 34–40, 43]`
 
 Untested React + TypeScript view layer. Receives `DiceRoller` and `StorageAdapter` via root props so `localStorage` and `RandomDiceRoller` are wired only at the browser entrypoint (`src/main.tsx`).
 
@@ -742,7 +776,8 @@ export function App(props: AppProps): React.JSX.Element;
 | **`CharacterGrid` & `CharacterCard`** | Displays **multiple characters simultaneously** in wider side-by-side cards with `64×64` portraits (`character.withPortrait(...)`) / initials avatars, XP, skills, `pendingAdvancement` callout, `StatusManager`, and `SkillSlotBar`. | Commits 17, 25, 29, 35, 36 |
 | **`CreateCharacterDialog`** | Creates characters via `Character.create` or `Character.builder(...)` with optional portrait upload/preview and custom starting skills. | Commits 17, 26, 35 |
 | **`portrait-image.ts`** | Center-crops and scales uploaded portrait files to `<= 256×256` WebP/JPEG data URLs (`encodePortraitFile`) and derives fallback initials (`characterInitials`). | Commit 35 |
-| **`CheckRollerPanel`** | Builds checks via `workspace.activeCampaign.character(...).makeCheck(...)` against `StaticOpposition`, `RolledOpposition`, another `Character`, or `DifficultyOpposition`, with status/modifier toggles. | Commits 18, 22, 25, 36 |
+| **`CheckRollerPanel`** | Builds checks via `workspace.activeCampaign.character(...).makeCheck(...)` against `StaticOpposition`, `RolledOpposition`, another `Character`, or `DifficultyOpposition`, with status/modifier toggles and optional actor/opposition `PhysicalDiceInput`. | Commits 18, 22, 25, 36, 43 |
+| **`PhysicalDiceInput`** | Toggleable per-die `1..6` `<select>` controls (`PhysicalDiceInputProps`, `normalizePhysicalDice`) for entering predetermined physical dice on actor or rolled opposition pools. | Commit 43 |
 | **`AdvancementPrompt`** | Invokes `.advance(name).claim()` or `.dismissAdvancement()`, supporting `.replacingSkill(...)` and `.purchasingSlot()` when skill slots are full. | Commits 19, 29, 36 |
 | **`RollHistoryLog`** | Displays `activeCampaign.rollLog` entries using `CheckResult` and `RolledPool` computed getters. | Commits 19, 36 |
 | **`StatusManager`** | Creates statuses via `Status.create` or `Status.roll` and updates characters via `.addStatus()` / `.removeStatus()`. | Commits 25, 36 |
