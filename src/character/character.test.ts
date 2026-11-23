@@ -642,3 +642,49 @@ describe('character module — Character Portraits', () => {
     for (const bad of [null, 123, true, [], {}, '', '   ']) expect(() => Character.deserialize(JSON.stringify({ ...legacyPayload, portrait: bad }))).toThrow();
   });
 });
+
+describe('character module — Physical / Predetermined Dice Values', () => {
+  it('CHR-MAN-01: CharacterCheckBuilder.withDiceValues resolves actor physical dice, XP, and advancements without rolling actor dice', () => {
+    const alice = Character.create('Alice').addSkill('Parkour', 2);
+    const b0 = alice.makeCheck('Parkour');
+    const b1 = b0.withDiceValues([6, 6]).withAction('Vault');
+    expect(b1).not.toBe(b0);
+
+    const natWin = b1.against(new StaticOpposition(10)).roll(new StubDiceRoller([]));
+    expect([natWin.checkResult.actor.rawDice, natWin.xpEarned, natWin.canAdvanceNaturally, natWin.character.pendingAdvancement?.xpCostToAdvance])
+      .toEqual([[6, 6], 0, true, 0]);
+    const promoted = natWin.character.advance('Rooftop Vault').claim();
+    expect(promoted.createdSkill.level).toBe(3);
+
+    const failRoller = new StubDiceRoller([5, 5]);
+    const failOut = alice.makeCheck('Parkour').withDiceValues([6, 2]).against(new RolledOpposition(2)).roll(failRoller);
+    expect([failOut.checkResult.actor.rawDice, failOut.checkResult.opposition.pool?.rawDice, failOut.xpEarned, failOut.character.xp, failOut.canAdvance, failRoller.remaining])
+      .toEqual([[6, 2], [5, 5], 1, 1, true, 0]);
+  });
+
+  it('CHR-MAN-02: supports physical dice for actor, defender, or both on againstCharacter opposed checks', () => {
+    const alice = Character.create('Alice').addSkill('Climb', 2).addStatus(Status.create('Nimble', 1));
+    const bob = Character.create('Bob').addSkill('Block', 2).addStatus(Status.create('Braced', 2));
+
+    const actorManualRoller = new StubDiceRoller([4, 3]);
+    const r1 = alice.makeCheck('Climb').withStatus('Nimble').withDiceValues([5, 4]).againstCharacter(bob, 'Block').roll(actorManualRoller);
+    expect([r1.checkResult.actor.rawDice, r1.checkResult.opposition.pool?.rawDice, r1.checkResult.outcome, actorManualRoller.remaining])
+      .toEqual([[5, 4], [4, 3], 'success', 0]);
+
+    const defManualRoller = new StubDiceRoller([2, 3]);
+    const r2 = alice.makeCheck('Climb').againstCharacter(bob, 'Block', (b) => b.withStatus('Braced').withModifier('Cover', 1).withDiceValues([4, 4])).roll(defManualRoller);
+    expect([r2.checkResult.actor.rawDice, r2.checkResult.opposition.pool?.rawDice, r2.checkResult.opposition.total, r2.actorXpEarned, defManualRoller.remaining])
+      .toEqual([[2, 3], [4, 4], 11, 1, 0]);
+
+    const bothManual = alice.makeCheck('Climb').withDiceValues([6, 5]).againstCharacter(bob, 'Block', (b) => b.withDiceValues([6, 6])).roll(new StubDiceRoller([]));
+    expect([bothManual.actorXpEarned, bothManual.defender.pendingAdvancement?.naturalAllSixes]).toEqual([1, true]);
+  });
+
+  it('CHR-MAN-03: rejects mismatched physical dice counts or invalid faces for actor and defender skills', () => {
+    const alice = Character.create('Alice').addSkill('Climb', 2);
+    const bob = Character.create('Bob').addSkill('Block', 3);
+    expect(() => alice.makeCheck('Climb').withDiceValues([6])).toThrow(RangeError);
+    expect(() => alice.makeCheck('Climb').withDiceValues([7 as unknown as DieValue, 2])).toThrow(RangeError);
+    expect(() => alice.makeCheck('Climb').againstCharacter(bob, 'Block', (b) => b.withDiceValues([4, 4]))).toThrow(RangeError);
+  });
+});

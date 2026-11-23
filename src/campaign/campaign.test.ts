@@ -355,4 +355,26 @@ describe('campaign module — Incremental Advanced Rules (Ties)', () => {
     expect([portraitsOf(ws0.activeCampaign.campaign), portraitsOf(rCara.campaign), portraitsOf(loadedWs.activeCampaign.campaign), portraitsOf(fromJsonCmp), portraitsOf(importedWs.activeCampaign.campaign), await local.load()])
       .toEqual([['data:image/png;base64,a1', undefined, 'https://example.com/cara.jpg', undefined], expected, expected, expected, expected, null]);
   });
+
+  it('CMP-MAN-01: supports actor and opposition physical dice through ScopedCheckBuilder and enforces statusesEnabled on defender chain', () => {
+    const alice = Character.create('Alice').addSkill('Parkour', 2);
+    const bob = Character.create('Bob').addSkill('Guard', 2).addStatus(Status.create('Alert', 1));
+    const wsDisabled = Workspace.empty().createCampaign('Tabletop', { rules: { allowCustomStartingSkills: true } }).activeCampaign.addCharacter(alice).activeCampaign.addCharacter(bob);
+
+    expect(() =>
+      wsDisabled.activeCampaign.character('Alice').makeCheck('Parkour').withDiceValues([5, 4])
+        .againstCharacter('Bob', 'Guard', (b) => b.withDiceValues([3, 3]).withStatus('Alert')),
+    ).toThrow(/disabled/i);
+
+    const wsEnabled = wsDisabled.activeCampaign.withRules({ statusesEnabled: true, tiesMode: 'twist' });
+    const r1 = wsEnabled.activeCampaign.character('Alice').makeCheck('Parkour').withAction('Leap').withDiceValues([4, 5])
+      .against(RolledOpposition.fromDice([4, 5])).roll(new StubDiceRoller([]));
+    expect([r1.outcome.checkResult.outcome, r1.outcome.xpEarned, r1.campaign.rollLog[0]?.actionDescription]).toEqual(['tie', 0, 'Leap']);
+
+    const r2 = r1.workspace.activeCampaign.character('Alice').makeCheck('Parkour').withDiceValues([3, 2])
+      .againstCharacter('Bob', 'Guard', (b) => b.withStatus('Alert').withModifier('High Ground', 1).withDiceValues([6, 6]))
+      .roll(new StubDiceRoller([]));
+    expect([r2.outcome.actorXpEarned, r2.campaign.findCharacter('Bob')?.pendingAdvancement?.naturalAllSixes, r2.campaign.rollLog.length])
+      .toEqual([1, true, 2]);
+  });
 });

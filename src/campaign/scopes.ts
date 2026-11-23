@@ -1,4 +1,4 @@
-import type { DiceRoller } from '../dice';
+import type { DiceRoller, DieValue } from '../dice';
 import type { CheckOpposition } from '../checks';
 import type { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterCheckBuilder, CharacterCheckOutcome, OpposedCharacterCheckOutcome, OpposedParticipantBuilder } from '../character';
 import type { Campaign } from './campaign';
@@ -45,6 +45,10 @@ export class ScopedCheckBuilder<TRoot> {
     return new ScopedCheckBuilder(this.campaign, this.actorId, this.wrap, this.checkBuilder.withModifier(label, value), this.actionDescription);
   }
 
+  withDiceValues(dice: readonly DieValue[]): ScopedCheckBuilder<TRoot> {
+    return new ScopedCheckBuilder(this.campaign, this.actorId, this.wrap, this.checkBuilder.withDiceValues(dice), this.actionDescription);
+  }
+
   against(opposition: CheckOpposition): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: CharacterCheckOutcome } } {
     const ready = this.checkBuilder.against(opposition);
     return this.makeRoller((diceRoller) => {
@@ -64,6 +68,7 @@ export class ScopedCheckBuilder<TRoot> {
       Object.freeze(Object.assign(Object.create(b) as object, {
         withStatus: (s: string) => { this.requireStatusesEnabled(); return guard(b.withStatus(s)); },
         withModifier: (l: string, v: number) => guard(b.withModifier(l, v)),
+        withDiceValues: (d: readonly DieValue[]) => guard(b.withDiceValues(d)),
       })) as OpposedParticipantBuilder;
     const ready = this.checkBuilder.againstCharacter(defender, defenderSkillIdOrName, configureDefender && ((b) => configureDefender(guard(b))));
     return this.makeRoller((diceRoller) => {
