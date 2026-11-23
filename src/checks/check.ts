@@ -1,7 +1,7 @@
-import type { DiceRoller } from '../dice';
+import type { DiceRoller, DieValue } from '../dice';
 import type { CheckOpposition, OppositionResult } from './opposition';
 import { RolledPool } from './rolled-pool';
-import { assertValidDiceCount, freezeModifiers, type CheckModifier, type CheckOutcome, type TiesMode } from './types';
+import { assertValidDiceCount, freezeDiceValues, freezeModifiers, type CheckModifier, type CheckOutcome, type TiesMode } from './types';
 
 export class CheckResult {
   constructor(
@@ -27,9 +27,14 @@ export class ReadyCheck {
     private readonly opposition: CheckOpposition,
     modifiers: readonly CheckModifier[],
     private readonly tiesMode?: TiesMode,
+    private readonly diceValues?: readonly DieValue[],
   ) {
     this.modifiers = freezeModifiers(modifiers);
     Object.freeze(this);
+  }
+
+  withDiceValues(dice: readonly DieValue[]): ReadyCheck {
+    return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, this.tiesMode, freezeDiceValues(dice, this.diceCount));
   }
 
   withModifier(label: string, value: number): ReadyCheck {
@@ -37,15 +42,16 @@ export class ReadyCheck {
   }
 
   withModifiers(modifiers: readonly CheckModifier[]): ReadyCheck {
-    return new ReadyCheck(this.diceCount, this.opposition, [...this.modifiers, ...modifiers], this.tiesMode);
+    return new ReadyCheck(this.diceCount, this.opposition, [...this.modifiers, ...modifiers], this.tiesMode, this.diceValues);
   }
 
   withTiesMode(tiesMode: TiesMode): ReadyCheck {
-    return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, tiesMode);
+    return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, tiesMode, this.diceValues);
   }
 
   resolve(diceRoller: DiceRoller): CheckResult {
-    const actor = new RolledPool(diceRoller.roll(this.diceCount).dice, this.modifiers);
+    const actorDice = this.diceValues ?? diceRoller.roll(this.diceCount).dice;
+    const actor = new RolledPool(actorDice, this.modifiers);
     const opposition = this.opposition.resolve(diceRoller);
     return new CheckResult(actor, opposition, this.tiesMode);
   }
@@ -58,6 +64,7 @@ export class Check {
     private readonly diceCount: number,
     modifiers?: readonly CheckModifier[],
     private readonly tiesMode?: TiesMode,
+    private readonly diceValues?: readonly DieValue[],
   ) {
     this.modifiers = freezeModifiers(modifiers);
     Object.freeze(this);
@@ -68,19 +75,27 @@ export class Check {
     return new Check(diceCount);
   }
 
+  static fromDice(dice: readonly DieValue[]): Check {
+    return Check.withDice(dice.length).withDiceValues(dice);
+  }
+
+  withDiceValues(dice: readonly DieValue[]): Check {
+    return new Check(this.diceCount, this.modifiers, this.tiesMode, freezeDiceValues(dice, this.diceCount));
+  }
+
   withModifier(label: string, value: number): Check {
     return this.withModifiers([{ label, value }]);
   }
 
   withModifiers(modifiers: readonly CheckModifier[]): Check {
-    return new Check(this.diceCount, [...this.modifiers, ...modifiers], this.tiesMode);
+    return new Check(this.diceCount, [...this.modifiers, ...modifiers], this.tiesMode, this.diceValues);
   }
 
   withTiesMode(tiesMode: TiesMode): Check {
-    return new Check(this.diceCount, this.modifiers, tiesMode);
+    return new Check(this.diceCount, this.modifiers, tiesMode, this.diceValues);
   }
 
   against(opposition: CheckOpposition): ReadyCheck {
-    return new ReadyCheck(this.diceCount, opposition, this.modifiers, this.tiesMode);
+    return new ReadyCheck(this.diceCount, opposition, this.modifiers, this.tiesMode, this.diceValues);
   }
 }

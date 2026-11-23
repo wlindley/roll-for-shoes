@@ -336,3 +336,74 @@ describe('checks module — Symmetric Actor & Opponent Status Modifiers', () => 
     expect([res.actor.finalTotal, res.opposition.total, res.outcome, res.margin, roller.remaining]).toEqual([7, 6, 'success', 1, 0]);
   });
 });
+
+describe('Module 2: Checks — Physical / Predetermined Dice Values', () => {
+  it('CHK-MAN-01: actor physical dice (Check.fromDice, Check.withDiceValues, ReadyCheck.withDiceValues) skip roller for actor', () => {
+    const roller = new StubDiceRoller([3, 4]);
+    const fromStatic = Check.fromDice([6, 2]).withModifier('Focus', 1).withTiesMode('twist').against(new RolledOpposition(2)).resolve(roller);
+    expect([fromStatic.actor.rawDice, fromStatic.actor.finalTotal, fromStatic.opposition.total, fromStatic.outcome, roller.remaining])
+      .toEqual([[6, 2], 9, 7, 'success', 0]);
+
+    const base = Check.withDice(2);
+    const withVals = base.withDiceValues([5, 5]).withModifier('Aim', 1);
+    expect(withVals).not.toBe(base);
+    const r1 = withVals.against(new StaticOpposition(11)).withTiesMode('twist').resolve(new StubDiceRoller([]));
+    expect([r1.actor.rawDice, r1.actor.finalTotal, r1.outcome]).toEqual([[5, 5], 11, 'tie']);
+
+    const readyBase = Check.withDice(2).against(new StaticOpposition(10));
+    const readyManual = readyBase.withDiceValues([6, 6]).withModifier('Penalty', -1);
+    expect(readyManual).not.toBe(readyBase);
+    const r2 = readyManual.resolve(new StubDiceRoller([]));
+    expect([r2.actor.rawDice, r2.actor.naturalAllSixes, r2.actor.finalTotal, r2.outcome]).toEqual([[6, 6], true, 11, 'success']);
+  });
+
+  it('CHK-MAN-02: opposition physical dice (RolledOpposition.fromDice & withDiceValues) skip roller for opposition', () => {
+    const roller = new StubDiceRoller([6, 3]);
+    const opp = RolledOpposition.fromDice([4, 5], { label: 'Rival' }).withModifier('Shield', 1);
+    expect([opp.diceCount, opp.diceValues, opp.label]).toEqual([2, [4, 5], 'Rival']);
+
+    const res = Check.withDice(2).against(opp).resolve(roller);
+    expect([res.actor.rawDice, res.opposition.pool?.rawDice, res.opposition.total, res.outcome, roller.remaining])
+      .toEqual([[6, 3], [4, 5], 10, 'failure', 0]);
+
+    const baseOpp = new RolledOpposition(2);
+    const manualOpp = baseOpp.withDiceValues([2, 3]);
+    expect([baseOpp.diceValues, manualOpp.diceValues]).toEqual([undefined, [2, 3]]);
+  });
+
+  it('CHK-MAN-03: resolves with zero random rolls when both actor and opposition supply physical dice', () => {
+    const emptyRoller = new StubDiceRoller([]);
+    const res = Check.fromDice([6, 4])
+      .against(new RolledOpposition(2).withDiceValues([5, 5]))
+      .withTiesMode('twist')
+      .resolve(emptyRoller);
+    expect([res.actor.rawDice, res.opposition.pool?.rawDice, res.outcome, emptyRoller.remaining])
+      .toEqual([[6, 4], [5, 5], 'tie', 0]);
+  });
+
+  it('CHK-MAN-04: DifficultyOpposition supports physical dice in dynamic mode and rejects them in static mode', () => {
+    const baseDyn = new DifficultyOpposition(DifficultyTier.Moderate, 'dynamic', { label: 'Chasm' });
+    const dynManual = baseDyn.withDiceValues([6, 2]).withModifier('Windy', 1);
+    expect([baseDyn.diceValues, dynManual.diceValues, dynManual.label]).toEqual([undefined, [6, 2], 'Chasm']);
+
+    const res = Check.fromDice([5, 4]).against(dynManual).resolve(new StubDiceRoller([]));
+    expect([res.opposition.pool?.rawDice, res.opposition.total, res.outcome]).toEqual([[6, 2], 9, 'failure']);
+
+    const statDiff = new DifficultyOpposition(DifficultyTier.Easy, 'static');
+    expect(() => statDiff.withDiceValues([4])).toThrow(/static/i);
+  });
+
+  it('CHK-MAN-05: validates physical dice count and face values (1..6 integers)', () => {
+    expect(() => Check.fromDice([])).toThrow(RangeError);
+    expect(() => RolledOpposition.fromDice([])).toThrow(RangeError);
+    expect(() => Check.withDice(2).withDiceValues([6])).toThrow(RangeError);
+    expect(() => Check.withDice(2).against(new StaticOpposition(6)).withDiceValues([6, 6, 6])).toThrow(RangeError);
+    expect(() => new RolledOpposition(2).withDiceValues([4])).toThrow(RangeError);
+    expect(() => new DifficultyOpposition(DifficultyTier.Hard, 'dynamic').withDiceValues([5, 5])).toThrow(RangeError);
+
+    for (const bad of [0, 7, -1, 2.5, Number.NaN] as unknown as DieValue[]) {
+      expect(() => Check.fromDice([bad])).toThrow(RangeError);
+      expect(() => new RolledOpposition(1).withDiceValues([bad])).toThrow(RangeError);
+    }
+  });
+});

@@ -1,6 +1,6 @@
-import type { DiceRoller } from '../dice';
+import type { DiceRoller, DieValue } from '../dice';
 import { RolledPool } from './rolled-pool';
-import { assertValidDiceCount, freezeModifiers, type CheckModifier, type DifficultyTier } from './types';
+import { assertValidDiceCount, freezeDiceValues, freezeModifiers, type CheckModifier, type DifficultyTier } from './types';
 
 export interface OppositionResult {
   readonly total: number;
@@ -24,44 +24,68 @@ export class StaticOpposition implements CheckOpposition {
 export class RolledOpposition implements CheckOpposition {
   readonly diceCount: number;
   readonly modifiers: readonly CheckModifier[];
+  readonly diceValues?: readonly DieValue[];
   readonly label?: string;
 
   constructor(
     diceCount: number,
-    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string; readonly diceValues?: readonly DieValue[] },
   ) {
     assertValidDiceCount(diceCount);
     this.diceCount = diceCount;
     this.modifiers = freezeModifiers(options?.modifiers);
+    this.diceValues = options?.diceValues ? freezeDiceValues(options.diceValues, diceCount) : undefined;
     this.label = options?.label;
+    Object.freeze(this);
+  }
+
+  static fromDice(
+    dice: readonly DieValue[],
+    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+  ): RolledOpposition {
+    return new RolledOpposition(dice.length, { ...options, diceValues: dice });
+  }
+
+  withDiceValues(dice: readonly DieValue[]): RolledOpposition {
+    return new RolledOpposition(this.diceCount, { modifiers: this.modifiers, label: this.label, diceValues: dice });
   }
 
   withModifier(label: string, value: number): RolledOpposition {
-    return new RolledOpposition(this.diceCount, { modifiers: [...this.modifiers, { label, value }], label: this.label });
+    return new RolledOpposition(this.diceCount, { modifiers: [...this.modifiers, { label, value }], label: this.label, diceValues: this.diceValues });
   }
 
   resolve(diceRoller: DiceRoller): OppositionResult {
-    const pool = new RolledPool(diceRoller.roll(this.diceCount).dice, this.modifiers);
+    const rawDice = this.diceValues ?? diceRoller.roll(this.diceCount).dice;
+    const pool = new RolledPool(rawDice, this.modifiers);
     return Object.freeze({ total: pool.finalTotal, pool, label: this.label });
   }
 }
 
 export class DifficultyOpposition implements CheckOpposition {
   readonly modifiers: readonly CheckModifier[];
+  readonly diceValues?: readonly DieValue[];
   readonly label?: string;
 
   constructor(
     readonly tier: DifficultyTier,
     readonly mode: 'static' | 'dynamic' = 'static',
-    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string },
+    options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string; readonly diceValues?: readonly DieValue[] },
   ) {
+    if (options?.diceValues && mode === 'static') {
+      throw new Error('Cannot supply dice values for static difficulty opposition');
+    }
     this.modifiers = freezeModifiers(options?.modifiers);
+    this.diceValues = options?.diceValues ? freezeDiceValues(options.diceValues, tier) : undefined;
     this.label = options?.label;
     Object.freeze(this);
   }
 
+  withDiceValues(dice: readonly DieValue[]): DifficultyOpposition {
+    return new DifficultyOpposition(this.tier, this.mode, { modifiers: this.modifiers, label: this.label, diceValues: dice });
+  }
+
   withModifier(label: string, value: number): DifficultyOpposition {
-    return new DifficultyOpposition(this.tier, this.mode, { modifiers: [...this.modifiers, { label, value }], label: this.label });
+    return new DifficultyOpposition(this.tier, this.mode, { modifiers: [...this.modifiers, { label, value }], label: this.label, diceValues: this.diceValues });
   }
 
   resolve(diceRoller: DiceRoller): OppositionResult {
@@ -69,7 +93,8 @@ export class DifficultyOpposition implements CheckOpposition {
       const modifierTotal = this.modifiers.reduce((sum, mod) => sum + mod.value, 0);
       return Object.freeze({ total: this.tier * 3 + modifierTotal, label: this.label });
     }
-    const pool = new RolledPool(diceRoller.roll(this.tier).dice, this.modifiers);
+    const rawDice = this.diceValues ?? diceRoller.roll(this.tier).dice;
+    const pool = new RolledPool(rawDice, this.modifiers);
     return Object.freeze({ total: pool.finalTotal, pool, label: this.label });
   }
 }
