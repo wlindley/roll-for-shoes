@@ -1,6 +1,7 @@
 import { assertPositiveInt, type DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
-import { AdvancementOutcome, CharacterAdvancementBuilder, CharacterCheckBuilder, PendingAdvancement } from './builders';
+import { AdvancementOutcome, CharacterAdvancementBuilder, PendingAdvancement } from './advancement';
+import { CharacterCheckBuilder } from './check-builders';
 import { bindCharacterFactory, deserializeCharacter, serializeCharacter } from './serialize';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
 import { SkillSlotConfig, SkillSlotSummary } from './skill-slots';

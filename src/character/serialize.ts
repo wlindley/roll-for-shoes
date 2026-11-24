@@ -1,6 +1,6 @@
 import { isDieValue, type DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
-import { PendingAdvancement } from './builders';
+import { PendingAdvancement } from './advancement';
 import type { Character } from './character';
 import { requireNonBlank, Skill } from './skill';
 import { Status } from './status';
