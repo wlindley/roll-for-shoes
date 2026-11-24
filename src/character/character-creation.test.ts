@@ -60,6 +60,11 @@ describe('Character.create', () => {
     ]);
   });
 
+  it('normalizes portrait: null to undefined in Character.create', () => {
+    const ada = Character.create('Ada', { portrait: null });
+    expect(ada.portrait).toBeUndefined();
+  });
+
   it.each([
     ['blank name in create', () => Character.create('   ')],
     ['blank id in create', () => Character.create('Ada', { id: '   ' })],

@@ -77,6 +77,15 @@ describe('Character statuses & check modifiers', () => {
     expect(withoutBoth.statuses).toEqual([]);
   });
 
+  it('requires exact status ID in removeStatus, rejecting display names and isolating duplicate-named statuses', () => {
+    const w1 = Status.create('Wounded', -1, { id: 'st-w1' });
+    const w2 = Status.create('Wounded', -3, { id: 'st-w2' });
+    const bob = Character.create('Bob').addStatus(w1).addStatus(w2);
+
+    expect(() => bob.removeStatus('Wounded')).toThrow(/not found/i);
+    expect(bob.removeStatus('st-w1').statuses).toEqual([w2]);
+  });
+
   it('selectively applies attached statuses and situational modifiers, and stops applying removed statuses', () => {
     const clean = Status.create('Clean Shoe', 2, { id: 'st-clean' });
     const nose = Status.create('Broken Nose', -3, { id: 'st-nose' });

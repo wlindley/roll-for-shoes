@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StaticOpposition } from '../checks';
 import { StubDiceRoller } from '../dice';
-import { Character, ClaimableAdvancement, SkillSlotConfig } from './index';
+import { CappedSkillSlotSummary, Character, ClaimableAdvancement, SkillSlotConfig, UnrestrictedSkillSlotSummary } from './index';
 
 function characterWithBankedXp(base: Character, xp: number): Character {
   let current = base;
@@ -59,6 +59,22 @@ describe('SkillSlotConfig & getSkillSlotSummary', () => {
     expect(withSlotAnd5th.getSkillSlotSummary(2, triBuy)).toMatchObject({ maxSlots: 5, usedSlots: 5, effectivePurchasedSlots: 1, availableSlots: 0 });
     expect(withSlotAnd5th.getSkillSlotSummary(2, triFalse)).toMatchObject({ maxSlots: 4, usedSlots: 5, effectivePurchasedSlots: 0, availableSlots: 0 });
     expect(() => readyWithIgnoredSlot.advance('S5').withSlotConfig(triFalse).claim()).toThrow(/slot/i);
+  });
+
+  it('narrows SkillSlotSummary between UnrestrictedSkillSlotSummary and CappedSkillSlotSummary', () => {
+    const bob = Character.create('Bob', { startingSkills: [{ name: 'Climb', level: 2 }] });
+    const unrestricted = bob.getSkillSlotSummary(2);
+    const cappedNoBuy = bob.getSkillSlotSummary(2, SkillSlotConfig.triangle());
+
+    expect(unrestricted).toBeInstanceOf(UnrestrictedSkillSlotSummary);
+    if (unrestricted.kind === 'unrestricted') {
+      // @ts-expect-error UnrestrictedSkillSlotSummary omits maxSlots
+      expect(unrestricted.maxSlots).toBeUndefined();
+    }
+    expect(cappedNoBuy).toBeInstanceOf(CappedSkillSlotSummary);
+    if (cappedNoBuy.kind === 'capped') {
+      expect(cappedNoBuy).toMatchObject({ kind: 'capped', maxSlots: 4, availableSlots: 3, nextSlotXpCost: null });
+    }
   });
 });
 

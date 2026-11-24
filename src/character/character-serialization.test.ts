@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { StaticOpposition } from '../checks';
 import { StubDiceRoller } from '../dice';
-import { Character, DEFAULT_STARTING_SKILL_NAME, PendingAdvancement, Skill, SkillSlotConfig, Status } from './index';
+import {
+  Character, type CharacterSnapshot, DEFAULT_STARTING_SKILL_NAME, fromCharacterSnapshot,
+  PendingAdvancement, Skill, SkillSlotConfig, Status, toCharacterSnapshot,
+} from './index';
 
 function buildFullCharacter(): Character {
   const triBuy = SkillSlotConfig.triangle({ allowSlotPurchase: true });
@@ -61,6 +64,22 @@ describe('Character serialize & deserialize round-trips', () => {
     expect(restoredPlain.portrait).toBeUndefined();
     expect(legacyRestored.portrait).toBeUndefined();
     expect(trimmedRestored.portrait).toBe('/ada.png');
+  });
+
+  it('maps Character to and from a typed CharacterSnapshot directly without JSON stringifying', () => {
+    const original = buildFullCharacter();
+    const snapshot: CharacterSnapshot = toCharacterSnapshot(original);
+    const restored = fromCharacterSnapshot(snapshot);
+
+    expect(snapshot.schemaVersion).toBe(1);
+    expect(restored).not.toBe(original);
+    expect(restored).toMatchObject({
+      id: original.id,
+      skills: original.skills,
+      statuses: original.statuses,
+      purchasedSlots: original.purchasedSlots,
+    });
+    expect(restored.pendingAdvancement?.actionDescription).toBe('Vault wall');
   });
 });
 
