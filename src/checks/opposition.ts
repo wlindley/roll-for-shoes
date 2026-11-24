@@ -1,6 +1,6 @@
-import type { DiceRoller, DieValue } from '../dice';
+import { assertPositiveInt, validateDiceValues, type DiceRoller, type DieValue } from '../dice';
 import { RolledPool } from './rolled-pool';
-import { assertValidDiceCount, freezeDiceValues, freezeModifiers, type CheckModifier, type DifficultyTier } from './types';
+import { freezeModifiers, type CheckModifier, type DifficultyTier } from './types';
 
 export interface OppositionResult {
   readonly total: number;
@@ -31,10 +31,10 @@ export class RolledOpposition implements CheckOpposition {
     diceCount: number,
     options?: { readonly modifiers?: readonly CheckModifier[]; readonly label?: string; readonly diceValues?: readonly DieValue[] },
   ) {
-    assertValidDiceCount(diceCount);
+    assertPositiveInt(diceCount, 'Dice count');
     this.diceCount = diceCount;
     this.modifiers = freezeModifiers(options?.modifiers);
-    this.diceValues = options?.diceValues ? freezeDiceValues(options.diceValues, diceCount) : undefined;
+    this.diceValues = options?.diceValues ? validateDiceValues(options.diceValues, diceCount) : undefined;
     this.label = options?.label;
     Object.freeze(this);
   }
@@ -75,7 +75,7 @@ export class DifficultyOpposition implements CheckOpposition {
       throw new Error('Cannot supply dice values for static difficulty opposition');
     }
     this.modifiers = freezeModifiers(options?.modifiers);
-    this.diceValues = options?.diceValues ? freezeDiceValues(options.diceValues, tier) : undefined;
+    this.diceValues = options?.diceValues ? validateDiceValues(options.diceValues, tier) : undefined;
     this.label = options?.label;
     Object.freeze(this);
   }

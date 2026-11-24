@@ -1,9 +1,9 @@
-import type { DieValue } from '../dice';
+import { assertPositiveInt, type DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
 import { AdvancementOutcome, CharacterAdvancementBuilder, CharacterCheckBuilder, PendingAdvancement } from './builders';
 import { deserializeCharacter, serializeCharacter } from './serialize';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
-import { requireInt, type SkillSlotConfig, SkillSlotSummary } from './skill-slots';
+import { type SkillSlotConfig, SkillSlotSummary } from './skill-slots';
 import type { Status } from './status';
 
 const normalizePortrait = (portrait: string | null): string | undefined =>
@@ -154,7 +154,7 @@ export class Character {
   }
 
   getSkillSlotSummary(level: number, slotConfig?: SkillSlotConfig | null): SkillSlotSummary {
-    requireInt(level, 1, 'Skill level');
+    assertPositiveInt(level, 'Skill level');
     const usedSlots = this.skills.filter((s) => s.level === level).length;
     if (!slotConfig) return new SkillSlotSummary(level, null, usedSlots, 0);
     const base = slotConfig.baseLimitForLevel(level);
@@ -164,7 +164,7 @@ export class Character {
   }
 
   purchaseSkillSlot(level: number, slotConfig: SkillSlotConfig): Character {
-    requireInt(level, 1, 'Skill level');
+    assertPositiveInt(level, 'Skill level');
     if (level === 1) throw new Error('Level 1 skill slots are unrestricted');
     if (!slotConfig.allowSlotPurchase) throw new Error('Skill slot purchase is disabled');
     const cost = 2 * level;

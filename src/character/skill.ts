@@ -1,3 +1,5 @@
+import { assertPositiveInt } from '../dice';
+
 export const DEFAULT_STARTING_SKILL_NAME = 'Do Anything';
 
 export function requireNonBlank(value: string, label: string): string {
@@ -22,9 +24,7 @@ export class Skill {
     readonly level: number;
     readonly parentSkillId?: string;
   }) {
-    if (!Number.isInteger(props.level) || props.level < 1) {
-      throw new RangeError(`Skill level must be a positive integer, received ${props.level}`);
-    }
+    assertPositiveInt(props.level, 'Skill level');
     this.id = resolveId(props.id);
     this.name = requireNonBlank(props.name, 'Skill name');
     this.level = props.level;

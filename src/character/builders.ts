@@ -1,4 +1,4 @@
-import type { DiceRoller, DieValue } from '../dice';
+import { validateDiceValues, type DiceRoller, type DieValue } from '../dice';
 import { Check, type CheckModifier, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type TiesMode } from '../checks';
 import type { Character } from './character';
 import { resolveId, type Skill } from './skill';
@@ -94,8 +94,7 @@ export class OpposedParticipantBuilder {
     return new OpposedParticipantBuilder(this.defender, this.skillLevel, [...this.modifiers, { label, value }], this.diceValues);
   }
   withDiceValues(dice: readonly DieValue[]): OpposedParticipantBuilder {
-    const validated = new RolledOpposition(this.skillLevel, { diceValues: dice }).diceValues;
-    return new OpposedParticipantBuilder(this.defender, this.skillLevel, this.modifiers, validated);
+    return new OpposedParticipantBuilder(this.defender, this.skillLevel, this.modifiers, validateDiceValues(dice, this.skillLevel));
   }
 }
 
@@ -125,8 +124,9 @@ export class CharacterCheckBuilder {
   }
 
   withDiceValues(dice: readonly DieValue[]): CharacterCheckBuilder {
-    const validated = new RolledOpposition(this.skillUsed.level, { diceValues: dice }).diceValues;
-    return new CharacterCheckBuilder(this.character, this.skillUsed, this.actionDescription, this.tiesMode, this.modifiers, validated);
+    return new CharacterCheckBuilder(
+      this.character, this.skillUsed, this.actionDescription, this.tiesMode, this.modifiers, validateDiceValues(dice, this.skillUsed.level),
+    );
   }
 
   withTiesMode(tiesMode: TiesMode): CharacterCheckBuilder {

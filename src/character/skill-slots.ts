@@ -1,5 +1,6 @@
-/** @internal */
-export function requireInt(value: number, min: number, label: string): number {
+import { assertPositiveInt } from '../dice';
+
+function requireInt(value: number, min: number, label: string): number {
   if (!Number.isInteger(value) || value < min) throw new RangeError(`${label} must be an integer >= ${min}`);
   return value;
 }
@@ -25,7 +26,7 @@ export class SkillSlotConfig {
   }
 
   baseLimitForLevel(level: number): number | null {
-    requireInt(level, 1, 'Skill level');
+    assertPositiveInt(level, 'Skill level');
     return level === 1 ? null : (this.limitsByLevel[level] ?? this.defaultSlotsAboveMax);
   }
 }

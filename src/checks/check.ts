@@ -1,7 +1,7 @@
-import type { DiceRoller, DieValue } from '../dice';
+import { assertPositiveInt, validateDiceValues, type DiceRoller, type DieValue } from '../dice';
 import type { CheckOpposition, OppositionResult } from './opposition';
 import { RolledPool } from './rolled-pool';
-import { assertValidDiceCount, freezeDiceValues, freezeModifiers, type CheckModifier, type CheckOutcome, type TiesMode } from './types';
+import { freezeModifiers, type CheckModifier, type CheckOutcome, type TiesMode } from './types';
 
 export class CheckResult {
   constructor(
@@ -34,7 +34,7 @@ export class ReadyCheck {
   }
 
   withDiceValues(dice: readonly DieValue[]): ReadyCheck {
-    return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, this.tiesMode, freezeDiceValues(dice, this.diceCount));
+    return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, this.tiesMode, validateDiceValues(dice, this.diceCount));
   }
 
   withModifier(label: string, value: number): ReadyCheck {
@@ -71,7 +71,7 @@ export class Check {
   }
 
   static withDice(diceCount: number): Check {
-    assertValidDiceCount(diceCount);
+    assertPositiveInt(diceCount, 'Dice count');
     return new Check(diceCount);
   }
 
@@ -80,7 +80,7 @@ export class Check {
   }
 
   withDiceValues(dice: readonly DieValue[]): Check {
-    return new Check(this.diceCount, this.modifiers, this.tiesMode, freezeDiceValues(dice, this.diceCount));
+    return new Check(this.diceCount, this.modifiers, this.tiesMode, validateDiceValues(dice, this.diceCount));
   }
 
   withModifier(label: string, value: number): Check {

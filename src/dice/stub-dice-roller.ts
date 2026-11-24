@@ -1,5 +1,5 @@
 import { DiceRoll } from './dice-roll';
-import { assertValidRollCount, isDieValue, type DiceRoller, type DieValue } from './types';
+import { assertValidRollCount, validateDiceValues, type DiceRoller, type DieValue } from './types';
 
 export class StubDiceRoller implements DiceRoller {
   private readonly queue: DieValue[] = [];
@@ -9,12 +9,7 @@ export class StubDiceRoller implements DiceRoller {
   }
 
   enqueue(...values: DieValue[]): this {
-    for (const value of values) {
-      if (!isDieValue(value)) {
-        throw new RangeError(`Invalid die value: ${String(value)}`);
-      }
-    }
-    this.queue.push(...values);
+    this.queue.push(...validateDiceValues(values, values.length));
     return this;
   }
 
