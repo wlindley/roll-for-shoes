@@ -6,7 +6,7 @@ import { Campaign, CampaignCharacterScope, type CampaignRollLogEntry, ScopedAdva
 
 describe('Campaign & Workspace character fluent scopes', () => {
   it('resolves vs-opposition checks via Campaign.character and prepends newest-first rollLog entries', () => {
-    const base = Campaign.create('Heist').addCharacter('Alice').addCharacter('Bob');
+    const base = Campaign.create('Heist').addCharacter(Character.create('Alice')).addCharacter(Character.create('Bob'));
     const bob = base.findCharacter('Bob')!;
     const scope = base.character('  alice  ');
     const builder = scope.makeCheck('Do Anything').withAction('Pick vault');
@@ -38,7 +38,10 @@ describe('Campaign & Workspace character fluent scopes', () => {
   });
 
   it('resolves character-opposed checks via Workspace.activeCampaign.character and records defender fields', () => {
-    const ws = Workspace.empty().createCampaign('Tavern').activeCampaign.addCharacter('Alice').activeCampaign.addCharacter('Bob');
+    const ws = Workspace.empty()
+      .createCampaign('Tavern')
+      .activeCampaign.addCharacter(Character.create('Alice'))
+      .activeCampaign.addCharacter(Character.create('Bob'));
     const result = ws.activeCampaign
       .character('Alice').makeCheck('Do Anything').withAction('Arm wrestle')
       .againstCharacter('  bob  ', 'do anything').roll(new StubDiceRoller([6, 3]));
@@ -60,7 +63,7 @@ describe('Campaign & Workspace character fluent scopes', () => {
   });
 
   it('rejects unknown characters and self-opposition in character scopes', () => {
-    const campaign = Campaign.create('Tavern').addCharacter('Alice');
+    const campaign = Campaign.create('Tavern').addCharacter(Character.create('Alice'));
 
     expect(() => campaign.character('Ghost')).toThrow(/character not found/i);
     expect(() => campaign.character('Alice').makeCheck('Do Anything').againstCharacter('  alice  ', 'Do Anything')).toThrow(/cannot oppose themselves/i);
@@ -70,7 +73,8 @@ describe('Campaign & Workspace character fluent scopes', () => {
   it('forwards campaign tiesMode ("twist" vs "fail") to single and opposed checks', () => {
     const wsTwist = Workspace.empty()
       .createCampaign('Heist', { rules: { tiesMode: 'twist' } })
-      .activeCampaign.addCharacter('Alice').activeCampaign.addCharacter('Bob');
+      .activeCampaign.addCharacter(Character.create('Alice'))
+      .activeCampaign.addCharacter(Character.create('Bob'));
 
     const singleTie = wsTwist.activeCampaign.character('Alice').makeCheck('Do Anything').against(new StaticOpposition(4)).roll(new StubDiceRoller([4]));
     const opposedTie = singleTie.workspace.activeCampaign.character('Alice').makeCheck('Do Anything').againstCharacter('Bob', 'Do Anything').roll(new StubDiceRoller([4, 4]));
@@ -118,7 +122,7 @@ describe('Campaign & Workspace character fluent scopes', () => {
   });
 
   it('claims advancements, dismisses pending advancements, and updates character portraits immutably', () => {
-    const rolled = Workspace.empty().createCampaign('Heist').activeCampaign.addCharacter('Alice')
+    const rolled = Workspace.empty().createCampaign('Heist').activeCampaign.addCharacter(Character.create('Alice'))
       .activeCampaign.character('Alice').makeCheck('Do Anything').against(new StaticOpposition(5)).roll(new StubDiceRoller([2])).workspace;
 
     const advBuilder = rolled.activeCampaign.character('Alice').advance('Lockpicking');

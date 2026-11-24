@@ -70,11 +70,14 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
   it('round-trips multi-campaign Workspace state and rehydrates CheckResult, RolledPool, and Status instances', () => {
     expect(Workspace.deserialize(Workspace.empty().serialize()).activeCampaignId).toBeNull();
 
-    const ws = Workspace.empty()
-      .createCampaign('Heist', { description: 'Vault job', rules: { tiesMode: 'twist', statusesEnabled: true } })
-      .createCampaign('Side Quest').selectCampaign('Heist')
+    const withHeist = Workspace.empty()
+      .createCampaign('Heist', { description: 'Vault job', rules: { tiesMode: 'twist', statusesEnabled: true } });
+    const heistId = withHeist.activeCampaignId!;
+    const withSideQuest = withHeist.createCampaign('Side Quest');
+    const sideQuestId = withSideQuest.activeCampaignId!;
+    const ws = withSideQuest.selectCampaign(heistId)
       .activeCampaign.addCharacter(Character.create('Alice').addStatus(Status.create('Clean Shoe', 2)))
-      .activeCampaign.addCharacter('Bob')
+      .activeCampaign.addCharacter(Character.create('Bob'))
       .activeCampaign.character('Alice').makeCheck('Do Anything').withStatus('Clean Shoe').againstCharacter('Bob', 'Do Anything').roll(new StubDiceRoller([4, 3])).workspace
       .activeCampaign.character('Bob').makeCheck('Do Anything').against(new StaticOpposition(5, 'Door')).roll(new StubDiceRoller([2])).workspace;
 
@@ -83,7 +86,7 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
     const [vsStatic, vsChar] = heist.rollLog;
 
     expect(restored.campaigns).toHaveLength(2);
-    expect(restored.campaign('Side Quest').campaign.description).toBeUndefined();
+    expect(restored.campaign(sideQuestId).campaign.description).toBeUndefined();
     expect(heist.description).toBe('Vault job');
     expect(heist.findCharacter('Alice')?.statuses[0]).toBeInstanceOf(Status);
     expect(vsStatic?.checkResult).toBeInstanceOf(CheckResult);
@@ -95,7 +98,7 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
   });
 
   it('exports/imports Campaign JSON and assigns a fresh ID when importing a duplicate campaign ID', () => {
-    const source = Campaign.create('Heist', { description: 'Crew backup' }).addCharacter('Alice');
+    const source = Campaign.create('Heist', { description: 'Crew backup' }).addCharacter(Character.create('Alice'));
     const json = source.exportJson();
     const parsed = Campaign.fromJson(json);
     expect(parsed).not.toBe(source);

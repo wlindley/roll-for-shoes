@@ -130,12 +130,12 @@ describe('Campaign entity & roster management', () => {
     const campaign = Campaign.create('Heist').addCharacter(Character.create('Alice', { id: 'char-1' }));
 
     expect(() => campaign.addCharacter('   ')).toThrow(/character name cannot be blank/i);
-    expect(() => campaign.addCharacter('  ALICE  ')).toThrow(/duplicate character/i);
+    expect(() => campaign.addCharacter(Character.create('  ALICE  '))).toThrow(/duplicate character/i);
     expect(() => campaign.addCharacter(Character.create('Alicia', { id: 'char-1' }))).toThrow(/duplicate character/i);
   });
 
   it('replaces an existing character in roster order and throws on unknown character ID', () => {
-    const campaign = Campaign.create('Heist').addCharacter('Alice').addCharacter('Bob');
+    const campaign = Campaign.create('Heist').addCharacter(Character.create('Alice')).addCharacter(Character.create('Bob'));
     const upgradedAlice = campaign.findCharacter('Alice')!.addSkill('Lockpicking', 2);
     const updated = campaign.replaceCharacter(upgradedAlice);
 
@@ -148,7 +148,7 @@ describe('Campaign entity & roster management', () => {
   it('removes characters by ID or case-insensitive name and throws when missing', () => {
     const campaign = Campaign.create('Heist')
       .addCharacter(Character.create('Alice', { id: 'char-alice' }))
-      .addCharacter('Bob');
+      .addCharacter(Character.create('Bob'));
 
     expect(campaign.removeCharacter('char-alice').characters.map((c) => c.name)).toEqual(['Bob']);
     expect(campaign.removeCharacter('  bob  ').characters.map((c) => c.name)).toEqual(['Alice']);

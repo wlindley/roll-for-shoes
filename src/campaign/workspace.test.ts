@@ -52,7 +52,8 @@ describe('Workspace & WorkspaceCampaignScope', () => {
 
   it('preserves activeCampaignId when deleting a non-active campaign', () => {
     const ws = Workspace.empty().createCampaign('Heist').createCampaign('Sci-Fi');
-    const afterDelete = ws.deleteCampaign('  heist  ');
+    const [heist] = ws.campaigns;
+    const afterDelete = ws.deleteCampaign(heist!.id);
 
     expect(afterDelete).not.toBe(ws);
     expect(afterDelete.campaigns.map((c) => c.name)).toEqual(['Sci-Fi']);
@@ -61,13 +62,13 @@ describe('Workspace & WorkspaceCampaignScope', () => {
 
   it('falls back to the first remaining campaign or null when deleting the active campaign', () => {
     const ws = Workspace.empty().createCampaign('Heist').createCampaign('Sci-Fi');
-    const heistId = ws.campaigns[0]!.id;
+    const [heist, scifi] = ws.campaigns;
 
-    const afterDeletingActive = ws.deleteCampaign('Sci-Fi');
+    const afterDeletingActive = ws.deleteCampaign(scifi!.id);
     expect(afterDeletingActive.campaigns.map((c) => c.name)).toEqual(['Heist']);
-    expect(afterDeletingActive.activeCampaignId).toBe(heistId);
+    expect(afterDeletingActive.activeCampaignId).toBe(heist!.id);
 
-    const afterDeletingLast = afterDeletingActive.deleteCampaign(heistId);
+    const afterDeletingLast = afterDeletingActive.deleteCampaign(heist!.id);
     expect(afterDeletingLast.campaigns).toEqual([]);
     expect(afterDeletingLast.activeCampaignId).toBeNull();
     expect(afterDeletingLast.tryGetActiveCampaign()).toBeNull();
@@ -86,13 +87,14 @@ describe('Workspace & WorkspaceCampaignScope', () => {
 
   it('mutates the active campaign immutably through WorkspaceCampaignScope methods', () => {
     const base = Workspace.empty().createCampaign('Heist');
+    const temp = Character.create('Temp');
     const updated = base.activeCampaign
       .rename('Grand Heist')
       .activeCampaign.withDescription('Vault job')
       .activeCampaign.withRules({ statusesEnabled: true })
-      .activeCampaign.addCharacter('Alice')
-      .activeCampaign.addCharacter(Character.create('Temp'))
-      .activeCampaign.removeCharacter('Temp');
+      .activeCampaign.addCharacter(Character.create('Alice'))
+      .activeCampaign.addCharacter(temp)
+      .activeCampaign.removeCharacter(temp.id);
 
     expect(updated).not.toBe(base);
     expect(base.activeCampaign.campaign.characters).toEqual([]);
@@ -104,20 +106,21 @@ describe('Workspace & WorkspaceCampaignScope', () => {
     expect(updated.activeCampaign.campaign.characters.map((c) => c.name)).toEqual(['Alice']);
   });
 
-  it('mutates a targeted campaign via workspace.campaign(idOrName) without changing activeCampaignId', () => {
+  it('mutates a targeted campaign via workspace.campaign(campaignId) without changing activeCampaignId', () => {
     const ws = Workspace.empty().createCampaign('Heist').createCampaign('Sci-Fi');
     const heistId = ws.campaigns[0]!.id;
 
     const updated = ws
       .campaign(heistId)
-      .addCharacter('Alice')
-      .campaign('  heist  ')
+      .addCharacter(Character.create('Alice'))
+      .campaign(heistId)
       .rename('Ocean Eleven');
 
     expect(updated.activeCampaignId).toBe(ws.activeCampaignId);
     expect(updated.activeCampaign.campaign.name).toBe('Sci-Fi');
     expect(updated.activeCampaign.campaign.characters).toEqual([]);
-    expect(updated.campaign('Ocean Eleven').campaign.characters.map((c) => c.name)).toEqual(['Alice']);
+    expect(updated.campaign(heistId).campaign.name).toBe('Ocean Eleven');
+    expect(updated.campaign(heistId).campaign.characters.map((c) => c.name)).toEqual(['Alice']);
   });
 
   it.each(['Unknown', '   '])('rejects unknown campaign reference %j across Workspace operations', (missing) => {
