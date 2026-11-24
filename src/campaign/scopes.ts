@@ -2,6 +2,32 @@ import type { DiceRoller, DieValue } from '../dice';
 import type { CheckOpposition } from '../checks';
 import type { AdvancementOutcome, Character, CharacterAdvancementBuilder, CharacterCheckBuilder, CharacterCheckOutcome, OpposedCharacterCheckOutcome, OpposedParticipantBuilder } from '../character';
 import type { Campaign } from './campaign';
+import { assertStatusesEnabled, type CampaignRulesConfig } from './rules';
+
+let unwrapDefender!: (scoped: ScopedDefenderBuilder) => OpposedParticipantBuilder;
+
+export class ScopedDefenderBuilder {
+  static {
+    unwrapDefender = (scoped) => scoped.inner;
+  }
+
+  constructor(private readonly inner: OpposedParticipantBuilder, private readonly rules: CampaignRulesConfig) {
+    Object.freeze(this);
+  }
+
+  withStatus(statusIdOrName: string): ScopedDefenderBuilder {
+    assertStatusesEnabled(this.rules);
+    return new ScopedDefenderBuilder(this.inner.withStatus(statusIdOrName), this.rules);
+  }
+
+  withModifier(label: string, value: number): ScopedDefenderBuilder {
+    return new ScopedDefenderBuilder(this.inner.withModifier(label, value), this.rules);
+  }
+
+  withDiceValues(dice: readonly DieValue[]): ScopedDefenderBuilder {
+    return new ScopedDefenderBuilder(this.inner.withDiceValues(dice), this.rules);
+  }
+}
 
 export class CampaignCharacterScope<TRoot> {
   constructor(private readonly campaign: Campaign, readonly character: Character, private readonly wrap: (nextCampaign: Campaign) => TRoot) {
@@ -37,7 +63,7 @@ export class ScopedCheckBuilder<TRoot> {
   }
 
   withStatus(statusIdOrName: string): ScopedCheckBuilder<TRoot> {
-    this.requireStatusesEnabled();
+    assertStatusesEnabled(this.campaign.rules);
     return new ScopedCheckBuilder(this.campaign, this.actorId, this.wrap, this.checkBuilder.withStatus(statusIdOrName), this.actionDescription);
   }
 
@@ -61,16 +87,18 @@ export class ScopedCheckBuilder<TRoot> {
     });
   }
 
-  againstCharacter(defenderIdOrName: string, defenderSkillIdOrName: string, configureDefender?: (b: OpposedParticipantBuilder) => OpposedParticipantBuilder): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: OpposedCharacterCheckOutcome } } {
+  againstCharacter(
+    defenderIdOrName: string,
+    defenderSkillIdOrName: string,
+    configureDefender?: (b: ScopedDefenderBuilder) => ScopedDefenderBuilder,
+  ): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: OpposedCharacterCheckOutcome } } {
     const defender = this.campaign.requireCharacter(defenderIdOrName);
     if (defender.id === this.actorId) throw new Error(`Character cannot oppose themselves: ${defender.name}`);
-    const guard = (b: OpposedParticipantBuilder): OpposedParticipantBuilder =>
-      Object.freeze(Object.assign(Object.create(b) as object, {
-        withStatus: (s: string) => { this.requireStatusesEnabled(); return guard(b.withStatus(s)); },
-        withModifier: (l: string, v: number) => guard(b.withModifier(l, v)),
-        withDiceValues: (d: readonly DieValue[]) => guard(b.withDiceValues(d)),
-      })) as OpposedParticipantBuilder;
-    const ready = this.checkBuilder.againstCharacter(defender, defenderSkillIdOrName, configureDefender && ((b) => configureDefender(guard(b))));
+    const ready = this.checkBuilder.againstCharacter(
+      defender,
+      defenderSkillIdOrName,
+      configureDefender && ((b) => unwrapDefender(configureDefender(new ScopedDefenderBuilder(b, this.campaign.rules)))),
+    );
     return this.makeRoller((diceRoller) => {
       const outcome = ready.roll(diceRoller);
       return [outcome, this.campaign.recordRoll([outcome.actor, outcome.defender], {
@@ -80,10 +108,6 @@ export class ScopedCheckBuilder<TRoot> {
         actorXpEarned: outcome.actorXpEarned, defenderXpEarned: outcome.defenderXpEarned,
       })];
     });
-  }
-
-  private requireStatusesEnabled(): void {
-    if (!this.campaign.rules.statusesEnabled) throw new Error('Statuses are disabled in this campaign');
   }
 
   private makeRoller<TOutcome>(exec: (diceRoller: DiceRoller) => readonly [TOutcome, Campaign]): { roll(diceRoller: DiceRoller): TRoot & { readonly outcome: TOutcome } } {

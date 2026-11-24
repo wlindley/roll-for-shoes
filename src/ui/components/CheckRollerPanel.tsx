@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useId, useState } from 'react';
-import type { Workspace } from '../../campaign';
-import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome, OpposedParticipantBuilder, Status } from '../../character';
+import type { ScopedDefenderBuilder, Workspace } from '../../campaign';
+import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome, Status } from '../../character';
 import { type CheckOutcome, DifficultyOpposition, DifficultyTier, RolledOpposition, StaticOpposition } from '../../checks';
 import type { DiceRoller, DieValue } from '../../dice';
 import { normalizePhysicalDice, PhysicalDiceInput } from './PhysicalDiceInput';
@@ -112,7 +112,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
         if (!defender || !defenderSkill) return;
         const defStatuses = campaign.rules.statusesEnabled ? defender.statuses.filter((s) => selectedStatusIds.includes(s.id)) : [];
         const configureDef = (defStatuses.length > 0 || oppPhysicalEnabled)
-          ? (b: OpposedParticipantBuilder) => {
+          ? (b: ScopedDefenderBuilder) => {
               const withSts = defStatuses.reduce((acc, s) => acc.withStatus(s.id), b);
               return oppPhysicalEnabled ? withSts.withDiceValues(normalizePhysicalDice(oppPhysicalDice, defenderSkill.level)) : withSts;
             }

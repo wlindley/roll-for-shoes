@@ -1,8 +1,33 @@
 import type { DieValue } from '../dice';
 import { type CheckModifier, CheckResult, type OppositionResult, RolledPool, type TiesMode } from '../checks';
-import { Character, SkillSlotConfig } from '../character';
-import { Campaign, type CampaignRollLogEntry, requireNonBlank } from './campaign';
-import { Workspace } from './workspace';
+import { type Character, fromCharacterSnapshot, SkillSlotConfig, toCharacterSnapshot } from '../character';
+import { type Campaign, type CampaignRollLogEntry, requireNonBlank } from './campaign';
+import type { CampaignRulesConfig } from './rules';
+import type { Workspace } from './workspace';
+
+export interface CampaignInstanceProps {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly rules: CampaignRulesConfig;
+  readonly characters: readonly Character[];
+  readonly rollLog: readonly CampaignRollLogEntry[];
+}
+
+let instantiateCampaign!: (props: CampaignInstanceProps) => Campaign;
+let instantiateWorkspace!: (activeCampaignId: string | null, campaigns: readonly Campaign[]) => Workspace;
+
+/** @internal */
+export function bindCampaignFactory(factory: (props: CampaignInstanceProps) => Campaign): void {
+  instantiateCampaign = factory;
+}
+
+/** @internal */
+export function bindWorkspaceFactory(factory: (activeCampaignId: string | null, campaigns: readonly Campaign[]) => Workspace): void {
+  instantiateWorkspace = factory;
+}
 
 const VALID_TIES_MODES: ReadonlySet<unknown> = new Set<TiesMode>(['fail', 'twist']);
 const VALID_KINDS: ReadonlySet<unknown> = new Set(['vs_opposition', 'character_opposed']);
@@ -36,12 +61,33 @@ function fromRollEntryDto(raw: Record<string, unknown>): CampaignRollLogEntry {
   const opp: OppositionResult = cr.opposition.pool
     ? Object.freeze({ kind: 'rolled', total: cr.opposition.total, label: cr.opposition.label, pool: fromPoolDto(cr.opposition.pool) })
     : Object.freeze({ kind: 'static', total: cr.opposition.total, label: cr.opposition.label });
-  return Object.freeze({ ...(raw as Omit<CampaignRollLogEntry, 'checkResult'>), checkResult: new CheckResult(fromPoolDto(cr.actor), opp, cr.tiesMode) });
+  const base = {
+    id: requireNonBlank(String(raw.id), 'Roll entry ID'),
+    timestamp: requireNonBlank(String(raw.timestamp), 'Roll timestamp'),
+    actorId: requireNonBlank(String(raw.actorId), 'Actor ID'),
+    actorName: requireNonBlank(String(raw.actorName), 'Actor name'),
+    actorSkillName: requireNonBlank(String(raw.actorSkillName), 'Actor skill'),
+    actionDescription: raw.actionDescription as string | undefined,
+    checkResult: new CheckResult(fromPoolDto(cr.actor), opp, cr.tiesMode),
+    actorXpEarned: Number(raw.actorXpEarned),
+  };
+  return Object.freeze(
+    raw.kind === 'character_opposed'
+      ? {
+          ...base,
+          kind: 'character_opposed' as const,
+          defenderId: requireNonBlank(String(raw.defenderId), 'Defender ID'),
+          defenderName: requireNonBlank(String(raw.defenderName), 'Defender name'),
+          defenderSkillName: requireNonBlank(String(raw.defenderSkillName), 'Defender skill'),
+          defenderXpEarned: Number(raw.defenderXpEarned),
+        }
+      : { ...base, kind: 'vs_opposition' as const },
+  );
 }
 
 const toCampaignDto = (c: Campaign) => ({
   schemaVersion: 1 as const, id: c.id, name: c.name, description: c.description, createdAt: c.createdAt, updatedAt: c.updatedAt,
-  rules: c.rules, characters: c.characters.map((ch) => JSON.parse(ch.serialize()) as unknown), rollLog: c.rollLog.map(toRollEntryDto),
+  rules: c.rules, characters: c.characters.map(toCharacterSnapshot), rollLog: c.rollLog.map(toRollEntryDto),
 });
 
 function parseSkillSlots(raw: unknown): SkillSlotConfig | null {
@@ -59,13 +105,23 @@ function fromCampaignDto(raw: unknown): Campaign {
   const [id, name, rules] = [requireNonBlank(String(raw.id), 'Campaign ID'), requireNonBlank(String(raw.name), 'Campaign name'), raw.rules as Record<string, unknown>];
   if (!VALID_TIES_MODES.has(rules.tiesMode)) throw new Error('Invalid campaign rules');
   if (!Array.isArray(raw.characters)) throw new Error('Campaign characters must be an array');
-  const characters = raw.characters.map((ch) => Character.deserialize(JSON.stringify(ch)));
+  const characters = raw.characters.map(fromCharacterSnapshot);
   const rollLog = (raw.rollLog as Record<string, unknown>[]).map(fromRollEntryDto);
-  return Campaign.rehydrate(
-    id, name, typeof raw.description === 'string' ? raw.description : undefined, String(raw.createdAt), String(raw.updatedAt),
-    { tiesMode: rules.tiesMode as TiesMode, statusesEnabled: Boolean(rules.statusesEnabled), allowCustomStartingSkills: Boolean(rules.allowCustomStartingSkills), skillSlots: parseSkillSlots(rules.skillSlots) },
-    characters, rollLog,
-  );
+  return instantiateCampaign({
+    id,
+    name,
+    description: typeof raw.description === 'string' ? raw.description : undefined,
+    createdAt: String(raw.createdAt),
+    updatedAt: String(raw.updatedAt),
+    rules: {
+      tiesMode: rules.tiesMode as TiesMode,
+      statusesEnabled: Boolean(rules.statusesEnabled),
+      allowCustomStartingSkills: Boolean(rules.allowCustomStartingSkills),
+      skillSlots: parseSkillSlots(rules.skillSlots),
+    },
+    characters,
+    rollLog,
+  });
 }
 
 export const exportCampaignJson = (campaign: Campaign): string => JSON.stringify(toCampaignDto(campaign));
@@ -79,6 +135,6 @@ export function deserializeWorkspace(serialized: string): Workspace {
   if (!Array.isArray(raw.campaigns)) throw new Error('Workspace campaigns must be an array');
   const campaigns = raw.campaigns.map(fromCampaignDto);
   const activeId = raw.activeCampaignId;
-  if (activeId !== null && (typeof activeId !== 'string' || !campaigns.some((c) => c.id === activeId))) throw new Error('Invalid activeCampaignId');
-  return Workspace.rehydrate(activeId, campaigns);
+  if (activeId !== null && typeof activeId !== 'string') throw new Error('Invalid activeCampaignId');
+  return instantiateWorkspace(activeId, campaigns);
 }

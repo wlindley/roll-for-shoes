@@ -1,7 +1,7 @@
 import type { Character } from '../character';
 import { Campaign, type CampaignRulesConfig } from './campaign';
 import { CampaignCharacterScope } from './scopes';
-import { deserializeWorkspace, serializeWorkspace } from './serialize';
+import { bindWorkspaceFactory, deserializeWorkspace, serializeWorkspace } from './serialize';
 import type { StorageAdapter } from './storage';
 
 export class WorkspaceCampaignScope {
@@ -29,8 +29,15 @@ export class Workspace {
   readonly campaigns: readonly Campaign[];
 
   private constructor(readonly activeCampaignId: string | null, campaigns: readonly Campaign[]) {
+    if (activeCampaignId !== null && !campaigns.some((c) => c.id === activeCampaignId)) {
+      throw new Error(`Active campaign not found: ${activeCampaignId}`);
+    }
     this.campaigns = Object.freeze([...campaigns]);
     Object.freeze(this);
+  }
+
+  static {
+    bindWorkspaceFactory((activeCampaignId, campaigns) => new Workspace(activeCampaignId, campaigns));
   }
 
   static empty(): Workspace {
@@ -41,10 +48,6 @@ export class Workspace {
   static async load(adapter: StorageAdapter): Promise<Workspace> {
     const raw = await adapter.load();
     return raw === null ? Workspace.empty() : Workspace.deserialize(raw);
-  }
-  /** @internal */
-  static rehydrate(activeCampaignId: string | null, campaigns: readonly Campaign[]): Workspace {
-    return new Workspace(activeCampaignId, campaigns);
   }
 
   createCampaign(name: string, options?: { readonly description?: string; readonly rules?: Partial<CampaignRulesConfig> }): Workspace {
