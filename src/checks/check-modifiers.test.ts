@@ -55,15 +55,15 @@ describe('Check & ReadyCheck — Actor Modifiers', () => {
     expect(result.outcome).toBe('failure');
   });
 
-  it('chains withModifier and withModifiers immutably on ReadyCheck while preserving tiesMode', () => {
-    const baseReady = Check.withDice(1).withTiesMode('twist').withModifier('Base', 1).against(new StaticOpposition(5));
-    const readyMods: CheckModifier[] = [{ label: 'Boost', value: 2 }];
-    const chainedReady = baseReady.withModifiers(readyMods).withModifier('Cap', -1);
-    readyMods.push({ label: 'Mutated', value: 50 });
+  it('chains withModifiers and withModifier immutably on Check while preserving tiesMode', () => {
+    const base = Check.withDice(1).withTiesMode('twist').withModifier('Base', 1);
+    const extraMods: CheckModifier[] = [{ label: 'Boost', value: 2 }];
+    const chained = base.withModifiers(extraMods).withModifier('Cap', -1);
+    extraMods.push({ label: 'Mutated', value: 50 });
 
-    expect(chainedReady).not.toBe(baseReady);
-    const chainedRes = chainedReady.resolve(new StubDiceRoller([3]));
-    const baseRes = baseReady.resolve(new StubDiceRoller([3]));
+    expect(chained).not.toBe(base);
+    const chainedRes = chained.against(new StaticOpposition(5)).resolve(new StubDiceRoller([3]));
+    const baseRes = base.against(new StaticOpposition(5)).resolve(new StubDiceRoller([3]));
 
     expect(chainedRes.actor.modifierTotal).toBe(2);
     expect(chainedRes.actor.finalTotal).toBe(5);

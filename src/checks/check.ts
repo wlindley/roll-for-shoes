@@ -33,22 +33,6 @@ export class ReadyCheck<TOpp extends OppositionResult = OppositionResult> {
     Object.freeze(this);
   }
 
-  withDiceValues(dice: readonly DieValue[]): ReadyCheck<TOpp> {
-    return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, this.tiesMode, validateDiceValues(dice, this.diceCount));
-  }
-
-  withModifier(label: string, value: number): ReadyCheck<TOpp> {
-    return this.withModifiers([{ label, value }]);
-  }
-
-  withModifiers(modifiers: readonly CheckModifier[]): ReadyCheck<TOpp> {
-    return new ReadyCheck(this.diceCount, this.opposition, [...this.modifiers, ...modifiers], this.tiesMode, this.diceValues);
-  }
-
-  withTiesMode(tiesMode: TiesMode): ReadyCheck<TOpp> {
-    return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, tiesMode, this.diceValues);
-  }
-
   resolve(diceRoller: DiceRoller): CheckResult<TOpp> {
     const actorDice = this.diceValues ?? diceRoller.roll(this.diceCount).dice;
     const actor = new RolledPool(actorDice, this.modifiers);

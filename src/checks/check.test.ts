@@ -104,17 +104,13 @@ describe('Check & CheckResult — TiesMode ("fail" vs "twist")', () => {
     expect(baseRes.outcome).toBe('failure');
   });
 
-  it('resolves ties as "tie" when withTiesMode("twist") is set on ReadyCheck after against() immutably', () => {
-    const baseReady = Check.withDice(2).against(DifficultyOpposition.dynamic(DifficultyTier.Hard));
-    const twistReady = baseReady.withTiesMode('twist');
+  it('resolves dynamic difficulty ties as "tie" under "twist" and supports reverting via withTiesMode("fail")', () => {
+    const twist = Check.withDice(2).withTiesMode('twist');
+    const reverted = twist.withTiesMode('fail');
+    const opp = DifficultyOpposition.dynamic(DifficultyTier.Hard);
 
-    expect(twistReady).not.toBe(baseReady);
-    const twistRes = twistReady.resolve(new StubDiceRoller([3, 4, 2, 2, 3]));
-    const revertedRes = twistReady.withTiesMode('fail').resolve(new StubDiceRoller([3, 4, 2, 2, 3]));
-
-    expect(twistRes.margin).toBe(0);
-    expect(twistRes.outcome).toBe('tie');
-    expect(revertedRes.outcome).toBe('failure');
+    expect(twist.against(opp).resolve(new StubDiceRoller([3, 4, 2, 2, 3])).outcome).toBe('tie');
+    expect(reverted.against(opp).resolve(new StubDiceRoller([3, 4, 2, 2, 3])).outcome).toBe('failure');
   });
 
   it('leaves strict wins and strict losses unaffected under tiesMode "twist"', () => {
@@ -154,14 +150,15 @@ describe('Check & ReadyCheck — Predetermined Dice & Validation', () => {
     expect(manual.against(new StaticOpposition(9)).resolve(new StubDiceRoller([])).outcome).toBe('success');
   });
 
-  it('resolves with zero random rolls when ReadyCheck.withDiceValues and manual opposition are used', () => {
-    const baseReady = Check.withDice(2).against(RolledOpposition.fromDice([5, 5]));
-    const manualReady = baseReady.withDiceValues([6, 4]).withTiesMode('twist');
+  it('resolves with zero random rolls when both actor and opposition supply predetermined dice', () => {
+    const result = Check.withDice(2)
+      .withDiceValues([6, 4])
+      .withTiesMode('twist')
+      .against(RolledOpposition.fromDice([5, 5]))
+      .resolve(new StubDiceRoller([]));
 
-    expect(manualReady).not.toBe(baseReady);
-    const result = manualReady.resolve(new StubDiceRoller([]));
     expect(result.actor.rawDice).toEqual([6, 4]);
-    expect(result.opposition.pool?.rawDice).toEqual([5, 5]);
+    expect(result.opposition.pool.rawDice).toEqual([5, 5]);
     expect(result.outcome).toBe('tie');
   });
 
@@ -175,7 +172,6 @@ describe('Check & ReadyCheck — Predetermined Dice & Validation', () => {
   it('rejects empty or mismatched predetermined dice array lengths with RangeError', () => {
     expect(() => Check.fromDice([])).toThrow(RangeError);
     expect(() => Check.withDice(2).withDiceValues([6])).toThrow(RangeError);
-    expect(() => Check.withDice(2).against(new StaticOpposition(6)).withDiceValues([6, 6, 6])).toThrow(RangeError);
   });
 
   it.each([0, 7, -1, 2.5, Number.NaN])('Check.fromDice rejects invalid die face %s with RangeError', (badFace) => {

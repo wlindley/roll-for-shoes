@@ -60,10 +60,6 @@ export class ReadyCharacterCheck {
     private readonly diceValues?: readonly DieValue[],
   ) { Object.freeze(this); }
 
-  withTiesMode(tiesMode: TiesMode): ReadyCharacterCheck {
-    return new ReadyCharacterCheck(this.character, this.skillUsed, this.opposition, this.actionDescription, tiesMode, this.modifiers, this.diceValues);
-  }
-
   roll(diceRoller: DiceRoller): CharacterCheckOutcome {
     const base = Check.withDice(this.skillUsed.level).withModifiers(this.modifiers).withTiesMode(this.tiesMode);
     const check = this.diceValues ? base.withDiceValues(this.diceValues) : base;
@@ -179,12 +175,6 @@ export class ReadyOpposedCharacterCheck {
     private readonly actorDiceValues?: readonly DieValue[],
   ) {
     Object.freeze(this);
-  }
-
-  withTiesMode(tiesMode: TiesMode): ReadyOpposedCharacterCheck {
-    return new ReadyOpposedCharacterCheck(
-      this.actor, this.actorSkill, this.defender, this.defenderSkill, this.defenderOpposition, this.actionDescription, tiesMode, this.actorModifiers, this.actorDiceValues,
-    );
   }
 
   roll(diceRoller: DiceRoller): OpposedCharacterCheckOutcome {

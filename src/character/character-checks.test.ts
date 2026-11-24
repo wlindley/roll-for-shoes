@@ -89,15 +89,12 @@ describe('Character.makeCheck & PendingAdvancement lifecycle', () => {
 });
 
 describe('TiesMode & character-vs-character opposed checks', () => {
-  it('awards 0 XP on a tie when twist mode is set on CharacterCheckBuilder or ReadyCharacterCheck', () => {
+  it('awards 0 XP on a tie when twist mode is set on CharacterCheckBuilder', () => {
     const bob = Character.create('Bob').addSkill('Climbing', 2);
-    const viaBuilder = bob.makeCheck('Climbing').withTiesMode('twist').against(new StaticOpposition(7)).roll(new StubDiceRoller([3, 4]));
-    const viaReady = bob.makeCheck('Climbing').against(new StaticOpposition(7)).withTiesMode('twist').roll(new StubDiceRoller([6, 1]));
+    const res = bob.makeCheck('Climbing').withTiesMode('twist').against(new StaticOpposition(7)).roll(new StubDiceRoller([3, 4]));
 
-    expect(viaBuilder.checkResult.outcome).toBe('tie');
-    expect(viaBuilder.xpEarned).toBe(0);
-    expect(viaReady.checkResult.outcome).toBe('tie');
-    expect(viaReady.xpEarned).toBe(0);
+    expect(res.checkResult.outcome).toBe('tie');
+    expect(res.xpEarned).toBe(0);
   });
 
   it('awards +1 XP and pendingAdvancement to the defender when the actor wins an opposed check', () => {
@@ -145,7 +142,7 @@ describe('TiesMode & character-vs-character opposed checks', () => {
   });
 
   it('awards 0 XP to both participants on a twist tie while preserving natural-6 advancement', () => {
-    const ready = Character.create('Alice').makeCheck('Do Anything').againstCharacter(Character.create('Bob'), 'Do Anything').withTiesMode('twist');
+    const ready = Character.create('Alice').makeCheck('Do Anything').withTiesMode('twist').againstCharacter(Character.create('Bob'), 'Do Anything');
     const res = ready.roll(new StubDiceRoller([6, 6]));
 
     expect(res.checkResult.outcome).toBe('tie');
