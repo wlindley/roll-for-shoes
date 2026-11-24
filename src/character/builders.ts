@@ -1,5 +1,5 @@
 import { validateDiceValues, type DiceRoller, type DieValue } from '../dice';
-import { Check, type CheckModifier, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type RolledOppositionResult, type TiesMode } from '../checks';
+import { Check, type CheckModifier, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type RolledOppositionResult, RolledPool, type TiesMode } from '../checks';
 import type { Character } from './character';
 import { resolveId, type Skill } from './skill';
 import type { SkillSlotConfig } from './skill-slots';
@@ -34,9 +34,10 @@ export class PendingAdvancement {
     Object.freeze(this);
   }
 
+  private get pool(): RolledPool { return new RolledPool(this.rawDice); }
   get targetLevel(): number { return this.usedSkillLevel + 1; }
-  get xpCostToAdvance(): number { return this.rawDice.filter((d) => d !== 6).length; }
-  get naturalAllSixes(): boolean { return this.xpCostToAdvance === 0; }
+  get xpCostToAdvance(): number { return this.pool.nonSixCount; }
+  get naturalAllSixes(): boolean { return this.pool.naturalAllSixes; }
 }
 
 export class CharacterCheckOutcome {
@@ -70,8 +71,8 @@ export class ReadyCharacterCheck {
 }
 
 export class OpposedParticipantBuilder {
-  /** @internal */ readonly modifiers: readonly CheckModifier[];
-  /** @internal */ readonly diceValues?: readonly DieValue[];
+  private readonly modifiers: readonly CheckModifier[];
+  private readonly diceValues?: readonly DieValue[];
   constructor(
     private readonly defender: Character,
     private readonly skillLevel: number,
@@ -91,6 +92,10 @@ export class OpposedParticipantBuilder {
   }
   withDiceValues(dice: readonly DieValue[]): OpposedParticipantBuilder {
     return new OpposedParticipantBuilder(this.defender, this.skillLevel, this.modifiers, validateDiceValues(dice, this.skillLevel));
+  }
+  toOpposition(label?: string): RolledOpposition {
+    const base = RolledOpposition.withDice(this.skillLevel, { modifiers: this.modifiers, label });
+    return this.diceValues ? base.withDiceValues(this.diceValues) : base;
   }
 }
 
@@ -139,10 +144,10 @@ export class CharacterCheckBuilder {
     configureDefender?: (defenderBuilder: OpposedParticipantBuilder) => OpposedParticipantBuilder,
   ): ReadyOpposedCharacterCheck {
     const defenderSkill = defender.skill(defenderSkillIdOrName);
-    const configured = configureDefender ? configureDefender(new OpposedParticipantBuilder(defender, defenderSkill.level)) : undefined;
-    const defenderOpposition = RolledOpposition.withDice(defenderSkill.level, { modifiers: configured?.modifiers, diceValues: configured?.diceValues });
+    const initial = new OpposedParticipantBuilder(defender, defenderSkill.level);
+    const defenderParticipant = configureDefender ? configureDefender(initial) : initial;
     return new ReadyOpposedCharacterCheck(
-      this.character, this.skillUsed, defender, defenderSkill, defenderOpposition, this.actionDescription, this.tiesMode, this.modifiers, this.diceValues,
+      this.character, this.skillUsed, defender, defenderSkill, defenderParticipant, this.actionDescription, this.tiesMode, this.modifiers, this.diceValues,
     );
   }
 }
@@ -168,7 +173,7 @@ export class ReadyOpposedCharacterCheck {
     private readonly actorSkill: Skill,
     private readonly defender: Character,
     private readonly defenderSkill: Skill,
-    private readonly defenderOpposition: RolledOpposition,
+    private readonly defenderParticipant: OpposedParticipantBuilder,
     private readonly actionDescription: string | undefined,
     private readonly tiesMode: TiesMode,
     private readonly actorModifiers: readonly CheckModifier[],
@@ -180,7 +185,7 @@ export class ReadyOpposedCharacterCheck {
   roll(diceRoller: DiceRoller): OpposedCharacterCheckOutcome {
     const base = Check.withDice(this.actorSkill.level).withModifiers(this.actorModifiers).withTiesMode(this.tiesMode);
     const check = this.actorDiceValues ? base.withDiceValues(this.actorDiceValues) : base;
-    const checkResult = check.against(this.defenderOpposition).resolve(diceRoller);
+    const checkResult = check.against(this.defenderParticipant.toOpposition()).resolve(diceRoller);
     const defenderOutcome: CheckOutcome =
       checkResult.outcome === 'tie' ? 'tie' : checkResult.outcome === 'success' ? 'failure' : 'success';
     const nextActor = this.actor.applyRoll(

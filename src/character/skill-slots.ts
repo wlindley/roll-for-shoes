@@ -25,6 +25,11 @@ export class SkillSlotConfig {
     return new SkillSlotConfig({ limitsByLevel: { 2: 4, 3: 3, 4: 2 }, allowSlotPurchase: options?.allowSlotPurchase });
   }
 
+  static slotCostForLevel(level: number): number {
+    assertPositiveInt(level, 'Skill level');
+    return 2 * level;
+  }
+
   baseLimitForLevel(level: number): number | null {
     assertPositiveInt(level, 'Skill level');
     return level === 1 ? null : (this.limitsByLevel[level] ?? this.defaultSlotsAboveMax);
@@ -37,5 +42,5 @@ export class SkillSlotSummary {
   }
 
   get availableSlots(): number | null { return this.maxSlots === null ? null : Math.max(0, this.maxSlots - this.usedSlots); }
-  get nextSlotXpCost(): number { return 2 * this.level; }
+  get nextSlotXpCost(): number { return SkillSlotConfig.slotCostForLevel(this.level); }
 }

@@ -1,14 +1,68 @@
-import { isDieValue } from '../dice';
+import { isDieValue, type DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
 import { PendingAdvancement } from './builders';
-import { Character } from './character';
+import type { Character } from './character';
 import { requireNonBlank, Skill } from './skill';
 import { Status } from './status';
 
-const VALID_OUTCOMES: ReadonlySet<unknown> = new Set<CheckOutcome>(['success', 'tie', 'failure']);
+export interface SkillSnapshot {
+  readonly id: string;
+  readonly name: string;
+  readonly level: number;
+  readonly parentSkillId?: string;
+}
 
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
+export interface StatusSnapshot {
+  readonly id: string;
+  readonly name: string;
+  readonly rating: number;
+  readonly note?: string;
+}
+
+export interface PendingAdvancementSnapshot {
+  readonly rollId: string;
+  readonly usedSkillId: string;
+  readonly usedSkillName: string;
+  readonly usedSkillLevel: number;
+  readonly rawDice: readonly DieValue[];
+  readonly checkOutcome: CheckOutcome;
+  readonly actionDescription?: string;
+}
+
+export interface CharacterSnapshot {
+  readonly schemaVersion: 1;
+  readonly id: string;
+  readonly name: string;
+  readonly portrait?: string;
+  readonly xp: number;
+  readonly skills: readonly SkillSnapshot[];
+  readonly statuses: readonly StatusSnapshot[];
+  readonly purchasedSlots: Readonly<Record<number, number>>;
+  readonly pendingAdvancement: PendingAdvancementSnapshot | null;
+}
+
+/** @internal */
+export interface CharacterInstanceProps {
+  readonly id: string;
+  readonly name: string;
+  readonly portrait?: string;
+  readonly xp: number;
+  readonly skills: readonly Skill[];
+  readonly statuses: readonly Status[];
+  readonly purchasedSlots: Readonly<Record<number, number>>;
+  readonly pendingAdvancement: PendingAdvancement | null;
+}
+
+let instantiateCharacter!: (props: CharacterInstanceProps) => Character;
+
+/** @internal */
+export function bindCharacterFactory(factory: (props: CharacterInstanceProps) => Character): void {
+  instantiateCharacter = factory;
+}
+
+const VALID_OUTCOMES: ReadonlySet<unknown> = new Set<CheckOutcome>(['success', 'tie', 'failure']);
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isCheckOutcome = (v: unknown): v is CheckOutcome => VALID_OUTCOMES.has(v);
 
 const readNonBlankString = (v: unknown, label: string): string => {
   if (typeof v !== 'string') throw new Error(`${label} must be a string`);
@@ -21,17 +75,13 @@ const readOptionalString = (v: unknown, label: string): string | undefined => {
 };
 
 const readInt = (v: unknown, min: number, label: string): number => {
-  if (typeof v !== 'number' || !Number.isInteger(v) || v < min) {
-    throw new Error(`${label} must be an integer >= ${min}`);
-  }
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < min) throw new Error(`${label} must be an integer >= ${min}`);
   return v;
 };
 
-const isCheckOutcome = (v: unknown): v is CheckOutcome => VALID_OUTCOMES.has(v);
-
-export function serializeCharacter(c: Character): string {
+export function toCharacterSnapshot(c: Character): CharacterSnapshot {
   const pa = c.pendingAdvancement;
-  return JSON.stringify({
+  return {
     schemaVersion: 1,
     id: c.id,
     name: c.name,
@@ -39,17 +89,21 @@ export function serializeCharacter(c: Character): string {
     xp: c.xp,
     skills: c.skills.map((s) => ({ id: s.id, name: s.name, level: s.level, parentSkillId: s.parentSkillId })),
     statuses: c.statuses.map((s) => ({ id: s.id, name: s.name, rating: s.rating, note: s.note })),
-    purchasedSlots: c.purchasedSlots,
+    purchasedSlots: { ...c.purchasedSlots },
     pendingAdvancement: pa && {
       rollId: pa.rollId,
       usedSkillId: pa.usedSkillId,
       usedSkillName: pa.usedSkillName,
       usedSkillLevel: pa.usedSkillLevel,
-      rawDice: pa.rawDice,
+      rawDice: [...pa.rawDice],
       checkOutcome: pa.checkOutcome,
       actionDescription: pa.actionDescription,
     },
-  });
+  };
+}
+
+export function serializeCharacter(c: Character): string {
+  return JSON.stringify(toCharacterSnapshot(c));
 }
 
 function parsePendingAdvancement(raw: unknown): PendingAdvancement | null {
@@ -70,22 +124,14 @@ function parsePendingAdvancement(raw: unknown): PendingAdvancement | null {
   });
 }
 
-export function deserializeCharacter(serialized: string): Character {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(serialized);
-  } catch {
-    throw new Error('Invalid character JSON');
-  }
+export function fromCharacterSnapshot(raw: unknown): Character {
   if (!isRecord(raw)) throw new Error('Character payload must be a JSON object');
   if (raw.schemaVersion !== 1) throw new Error(`Unsupported schemaVersion: ${String(raw.schemaVersion)}`);
   const id = readNonBlankString(raw.id, 'Character id');
   const name = readNonBlankString(raw.name, 'Character name');
   const portrait = raw.portrait === undefined ? undefined : readNonBlankString(raw.portrait, 'Character portrait');
   const xp = readInt(raw.xp, 0, 'Character xp');
-  if (!Array.isArray(raw.skills) || raw.skills.length === 0) {
-    throw new Error('Character skills must be a non-empty array');
-  }
+  if (!Array.isArray(raw.skills) || raw.skills.length === 0) throw new Error('Character skills must be a non-empty array');
   const seenNames = new Set<string>();
   const skills = raw.skills.map((item) => {
     if (!isRecord(item)) throw new Error('Invalid skill entry');
@@ -113,5 +159,15 @@ export function deserializeCharacter(serialized: string): Character {
   for (const [k, v] of Object.entries(raw.purchasedSlots)) {
     purchasedSlots[readInt(Number(k), 2, 'purchasedSlots level')] = readInt(v, 0, 'purchasedSlots count');
   }
-  return Character.rehydrate(id, name, xp, skills, parsePendingAdvancement(raw.pendingAdvancement), statuses, purchasedSlots, portrait);
+  return instantiateCharacter({ id, name, portrait, xp, skills, statuses, purchasedSlots, pendingAdvancement: parsePendingAdvancement(raw.pendingAdvancement) });
+}
+
+export function deserializeCharacter(serialized: string): Character {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(serialized);
+  } catch {
+    throw new Error('Invalid character JSON');
+  }
+  return fromCharacterSnapshot(raw);
 }

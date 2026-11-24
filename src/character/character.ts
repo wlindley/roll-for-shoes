@@ -1,9 +1,9 @@
 import { assertPositiveInt, type DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
 import { AdvancementOutcome, CharacterAdvancementBuilder, CharacterCheckBuilder, PendingAdvancement } from './builders';
-import { deserializeCharacter, serializeCharacter } from './serialize';
+import { bindCharacterFactory, deserializeCharacter, serializeCharacter } from './serialize';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
-import { type SkillSlotConfig, SkillSlotSummary } from './skill-slots';
+import { SkillSlotConfig, SkillSlotSummary } from './skill-slots';
 import type { Status } from './status';
 
 const normalizePortrait = (portrait: string | null): string | undefined =>
@@ -63,13 +63,17 @@ export class Character {
     skills: readonly Skill[],
     readonly pendingAdvancement: PendingAdvancement | null,
     statuses: readonly Status[],
-    purchasedSlots?: Readonly<Record<number, number>>,
+    purchasedSlots: Readonly<Record<number, number>>,
     readonly portrait?: string,
   ) {
     this.skills = Object.freeze([...skills]);
     this.statuses = Object.freeze([...statuses]);
     this.purchasedSlots = Object.freeze({ ...purchasedSlots });
     Object.freeze(this);
+  }
+
+  static {
+    bindCharacterFactory((p) => new Character(p.id, p.name, p.xp, p.skills, p.pendingAdvancement, p.statuses, p.purchasedSlots, p.portrait));
   }
 
   static create(name: string, options?: { readonly id?: string; readonly portrait?: string }): Character {
@@ -98,11 +102,6 @@ export class Character {
 
   static deserialize(serialized: string): Character {
     return deserializeCharacter(serialized);
-  }
-
-  /** @internal */
-  static rehydrate(id: string, name: string, xp: number, skills: readonly Skill[], pendingAdvancement: PendingAdvancement | null, statuses: readonly Status[], purchasedSlots?: Readonly<Record<number, number>>, portrait?: string): Character {
-    return new Character(id, name, xp, skills, pendingAdvancement, statuses, purchasedSlots, portrait);
   }
 
   skill(idOrName: string): Skill { return findByIdOrName(this.skills, idOrName, 'Skill'); }
@@ -164,10 +163,9 @@ export class Character {
   }
 
   purchaseSkillSlot(level: number, slotConfig: SkillSlotConfig): Character {
-    assertPositiveInt(level, 'Skill level');
+    const cost = SkillSlotConfig.slotCostForLevel(level);
     if (level === 1) throw new Error('Level 1 skill slots are unrestricted');
     if (!slotConfig.allowSlotPurchase) throw new Error('Skill slot purchase is disabled');
-    const cost = 2 * level;
     if (this.xp < cost) throw new Error(`Insufficient XP to purchase level ${level} slot`);
     return this.copy({ xp: this.xp - cost, purchasedSlots: { ...this.purchasedSlots, [level]: (this.purchasedSlots[level] ?? 0) + 1 } });
   }
@@ -202,7 +200,8 @@ export class Character {
       parentSkillId: pending.usedSkillId, slotConfig, replaceSkillIdOrName,
     });
     const next = base.copy({ xp: base.xp - pending.xpCostToAdvance, skills, pendingAdvancement: null });
-    return new AdvancementOutcome(next, created, pending.xpCostToAdvance, purchaseSlot ? 2 * pending.targetLevel : 0, replaced);
+    const slotCost = purchaseSlot ? SkillSlotConfig.slotCostForLevel(pending.targetLevel) : 0;
+    return new AdvancementOutcome(next, created, pending.xpCostToAdvance, slotCost, replaced);
   }
 
   /** @internal */
