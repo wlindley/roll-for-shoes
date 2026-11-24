@@ -1,8 +1,11 @@
 import type React from 'react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { Workspace } from '../../campaign';
 import { Character, DEFAULT_STARTING_SKILL_NAME } from '../../character';
-import { characterInitials, encodePortraitFile } from '../portrait-image';
+import { formatError } from '../error';
+import { encodePortraitFile } from '../portrait-image';
+import { CharacterAvatar } from './CharacterAvatar';
+import { ModalDialog } from './ModalDialog';
 
 export interface CreateCharacterDialogProps {
   readonly workspace: Workspace;
@@ -17,10 +20,8 @@ interface StartingSkillRow {
   readonly level: string;
 }
 
-export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.JSX.Element {
-  const { workspace, open, onClose, onChange } = props;
+function CreateCharacterForm({ workspace, onClose, onChange }: Omit<CreateCharacterDialogProps, 'open'>): React.JSX.Element {
   const allowCustom = workspace.activeCampaign.campaign.rules.allowCustomStartingSkills;
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nextRowKey = useRef(0);
   const [name, setName] = useState('');
@@ -29,21 +30,6 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
   const [dialogError, setDialogError] = useState<string | null>(null);
   const nameId = useId();
   const portraitId = useId();
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      setName('');
-      setPortrait(null);
-      setStartingSkills([]);
-      setDialogError(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
 
   const updateRow = (key: number, patch: Partial<StartingSkillRow>) =>
     setStartingSkills((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -56,7 +42,7 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
       setPortrait(await encodePortraitFile(file));
       setDialogError(null);
     } catch (err: unknown) {
-      setDialogError(err instanceof Error ? err.message : 'Unable to load portrait.');
+      setDialogError(formatError(err, 'Unable to load portrait.'));
     } finally {
       input.value = '';
     }
@@ -72,33 +58,27 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
       onChange(workspace.activeCampaign.addCharacter(character));
       onClose();
     } catch (err: unknown) {
-      setDialogError(err instanceof Error ? err.message : 'Unable to create character.');
+      setDialogError(formatError(err, 'Unable to create character.'));
     }
   };
 
   return (
-    <dialog ref={dialogRef} onClose={onClose} aria-labelledby={`${nameId}-title`}>
-      <form className="stack" onSubmit={handleSubmit}>
-        <h3 id={`${nameId}-title`}>New Character</h3>
-        {dialogError && <div className="error-banner" role="alert">{dialogError}</div>}
-        <label htmlFor={nameId}>Character name</label>
-        <input id={nameId} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bob" required />
-        <div className="stack">
-          <label htmlFor={portraitId}>Portrait (optional)</label>
-          <div className="row">
-            {portrait ? (
-              <img src={portrait} alt="Character portrait preview" width={64} height={64} className="character-avatar" />
-            ) : (
-              <div className="character-avatar character-avatar-fallback" aria-hidden="true">{characterInitials(name.trim() || '?')}</div>
-            )}
-            <input ref={fileInputRef} id={portraitId} type="file" accept="image/*" onChange={handlePortraitFile} />
-            {portrait && (
-              <button type="button" className="btn" onClick={() => { setPortrait(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
-                Clear Portrait
-              </button>
-            )}
-          </div>
+    <form className="stack" onSubmit={handleSubmit}>
+      {dialogError && <div className="error-banner" role="alert">{dialogError}</div>}
+      <label htmlFor={nameId}>Character name</label>
+      <input id={nameId} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bob" autoFocus required />
+      <div className="stack">
+        <label htmlFor={portraitId}>Portrait (optional)</label>
+        <div className="row">
+          <CharacterAvatar name={name} portrait={portrait} alt="Character portrait preview" />
+          <input ref={fileInputRef} id={portraitId} type="file" accept="image/*" onChange={handlePortraitFile} />
+          {portrait && (
+            <button type="button" className="btn" onClick={() => { setPortrait(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+              Clear Portrait
+            </button>
+          )}
         </div>
+      </div>
         {allowCustom && (
           <fieldset className="stack">
             <legend>Custom Starting Skills</legend>
@@ -139,11 +119,18 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
             </div>
           </fieldset>
         )}
-        <div className="row">
-          <button type="submit" className="btn btn-primary">Create Character</button>
-          <button type="button" className="btn" onClick={onClose}>Cancel</button>
-        </div>
-      </form>
-    </dialog>
+      <div className="row">
+        <button type="submit" className="btn btn-primary">Create Character</button>
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+export function CreateCharacterDialog({ workspace, open, onClose, onChange }: CreateCharacterDialogProps): React.JSX.Element {
+  return (
+    <ModalDialog open={open} title="New Character" onClose={onClose}>
+      {open && <CreateCharacterForm workspace={workspace} onClose={onClose} onChange={onChange} />}
+    </ModalDialog>
   );
 }

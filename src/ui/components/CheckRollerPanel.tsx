@@ -4,6 +4,7 @@ import type { ScopedDefenderBuilder, Workspace } from '../../campaign';
 import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome, Status } from '../../character';
 import { type CheckOutcome, DifficultyOpposition, DifficultyTier, RolledOpposition, StaticOpposition } from '../../checks';
 import type { DiceRoller, DieValue } from '../../dice';
+import { formatError } from '../error';
 import { normalizePhysicalDice, PhysicalDiceInput } from './PhysicalDiceInput';
 
 export interface CheckRollerPanelProps {
@@ -142,7 +143,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       setActorPhysicalDice([]);
       setOppPhysicalDice([]);
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Unable to resolve check.');
+      onError(formatError(err, 'Unable to resolve check.'));
     }
   };
 

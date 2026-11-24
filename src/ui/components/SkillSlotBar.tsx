@@ -1,6 +1,7 @@
 import type React from 'react';
 import type { Workspace } from '../../campaign';
 import type { Character, SkillSlotConfig } from '../../character';
+import { formatError } from '../error';
 
 export interface SkillSlotBarProps {
   readonly workspace: Workspace;
@@ -24,7 +25,7 @@ export function SkillSlotBar({ workspace, character, slotConfig, onChange, onErr
     try {
       onChange(workspace.activeCampaign.character(character.id).update((c) => c.purchaseSkillSlot(level, slotConfig)).workspace);
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Unable to purchase skill slot.');
+      onError(formatError(err, 'Unable to purchase skill slot.'));
     }
   };
 

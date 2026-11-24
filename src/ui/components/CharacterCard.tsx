@@ -3,7 +3,9 @@ import { useRef } from 'react';
 import type { Workspace } from '../../campaign';
 import type { Character } from '../../character';
 import type { DiceRoller } from '../../dice';
-import { characterInitials, encodePortraitFile } from '../portrait-image';
+import { formatError } from '../error';
+import { encodePortraitFile } from '../portrait-image';
+import { CharacterAvatar } from './CharacterAvatar';
 import { SkillSlotBar } from './SkillSlotBar';
 import { StatusManager } from './StatusManager';
 
@@ -32,7 +34,7 @@ export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
       const url = await encodePortraitFile(file);
       onChange(workspace.activeCampaign.character(character.id).update((c) => c.withPortrait(url)).workspace);
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Unable to update portrait.');
+      onError(formatError(err, 'Unable to update portrait.'));
     } finally {
       input.value = '';
     }
@@ -42,18 +44,14 @@ export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
     try {
       onChange(workspace.activeCampaign.character(character.id).update((c) => c.withPortrait(null)).workspace);
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Unable to clear portrait.');
+      onError(formatError(err, 'Unable to clear portrait.'));
     }
   };
 
   return (
     <article className="card stack" aria-label={`Character ${character.name}`}>
       <div className="character-header">
-        {character.portrait ? (
-          <img src={character.portrait} alt={`${character.name} portrait`} width={64} height={64} className="character-avatar" />
-        ) : (
-          <div className="character-avatar character-avatar-fallback" aria-hidden="true">{characterInitials(character.name)}</div>
-        )}
+        <CharacterAvatar name={character.name} portrait={character.portrait} />
         <div className="character-header-body">
           <div className="row-between">
             <h3>{character.name}</h3>

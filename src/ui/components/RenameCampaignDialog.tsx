@@ -1,6 +1,8 @@
 import type React from 'react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import type { Workspace } from '../../campaign';
+import { formatError } from '../error';
+import { ModalDialog } from './ModalDialog';
 
 export interface RenameCampaignDialogProps {
   readonly workspace: Workspace;
@@ -9,25 +11,10 @@ export interface RenameCampaignDialogProps {
   readonly onChange: (next: Workspace) => void;
 }
 
-export function RenameCampaignDialog(props: RenameCampaignDialogProps): React.JSX.Element {
-  const { workspace, open, onClose, onChange } = props;
-  const campaignName = workspace.activeCampaign.campaign.name;
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const [name, setName] = useState(campaignName);
+function RenameCampaignForm({ workspace, onClose, onChange }: Omit<RenameCampaignDialogProps, 'open'>): React.JSX.Element {
+  const [name, setName] = useState(workspace.activeCampaign.campaign.name);
   const [dialogError, setDialogError] = useState<string | null>(null);
-  const baseId = useId();
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      setName(campaignName);
-      setDialogError(null);
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open, campaignName]);
+  const nameId = useId();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -35,24 +22,29 @@ export function RenameCampaignDialog(props: RenameCampaignDialogProps): React.JS
       onChange(workspace.activeCampaign.rename(name));
       onClose();
     } catch (err: unknown) {
-      setDialogError(err instanceof Error ? err.message : 'Unable to rename campaign.');
+      setDialogError(formatError(err, 'Unable to rename campaign.'));
     }
   };
 
   return (
-    <dialog ref={dialogRef} onClose={onClose} aria-labelledby={`${baseId}-title`}>
-      <form className="stack" onSubmit={handleSubmit}>
-        <h3 id={`${baseId}-title`}>Rename Campaign</h3>
-        {dialogError && <div className="error-banner" role="alert">{dialogError}</div>}
-        <div className="field">
-          <label htmlFor={`${baseId}-name`}>Campaign name</label>
-          <input id={`${baseId}-name`} type="text" value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div className="row">
-          <button type="submit" className="btn btn-primary">Save Name</button>
-          <button type="button" className="btn" onClick={onClose}>Cancel</button>
-        </div>
-      </form>
-    </dialog>
+    <form className="stack" onSubmit={handleSubmit}>
+      {dialogError && <div className="error-banner" role="alert">{dialogError}</div>}
+      <div className="field">
+        <label htmlFor={nameId}>Campaign name</label>
+        <input id={nameId} type="text" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+      </div>
+      <div className="row">
+        <button type="submit" className="btn btn-primary">Save Name</button>
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+export function RenameCampaignDialog({ workspace, open, onClose, onChange }: RenameCampaignDialogProps): React.JSX.Element {
+  return (
+    <ModalDialog open={open} title="Rename Campaign" onClose={onClose}>
+      {open && <RenameCampaignForm workspace={workspace} onClose={onClose} onChange={onChange} />}
+    </ModalDialog>
   );
 }

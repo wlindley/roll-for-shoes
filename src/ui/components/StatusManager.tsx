@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import type { Workspace } from '../../campaign';
 import { type Character, Status } from '../../character';
 import type { DiceRoller } from '../../dice';
+import { formatError } from '../error';
 
 export interface StatusManagerProps {
   readonly workspace: Workspace;
@@ -28,7 +29,7 @@ export function StatusManager({ workspace, character, diceRoller, onChange, onEr
       onChange(workspace.activeCampaign.character(character.id).update(fn).workspace);
       return true;
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : fallback);
+      onError(formatError(err, fallback));
       return false;
     }
   };

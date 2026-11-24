@@ -2,6 +2,7 @@ import type React from 'react';
 import { useId, useState } from 'react';
 import type { Workspace } from '../../campaign';
 import type { Character, PendingAdvancement } from '../../character';
+import { formatError } from '../error';
 import { DiceRow } from './CheckRollerPanel';
 
 export interface AdvancementPromptProps {
@@ -42,7 +43,7 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
             : base;
       onChange(claimable.claim().workspace);
     } catch (err: unknown) {
-      setPromptError(err instanceof Error ? err.message : 'Unable to claim advancement.');
+      setPromptError(formatError(err, 'Unable to claim advancement.'));
     }
   };
 
@@ -50,7 +51,7 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
     try {
       onChange(workspace.activeCampaign.character(character.id).dismissAdvancement().workspace);
     } catch (err: unknown) {
-      setPromptError(err instanceof Error ? err.message : 'Unable to dismiss advancement.');
+      setPromptError(formatError(err, 'Unable to dismiss advancement.'));
     }
   };
 

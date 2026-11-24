@@ -12,13 +12,12 @@ import { CheckRollerPanel } from './components/CheckRollerPanel';
 import { InstallAppButton } from './components/InstallAppButton';
 import { RenameCampaignDialog } from './components/RenameCampaignDialog';
 import { RollHistoryLog } from './components/RollHistoryLog';
+import { formatError } from './error';
 
 export interface AppProps {
   readonly diceRoller: DiceRoller;
   readonly storageAdapter: StorageAdapter;
 }
-
-const toErrorMessage = (err: unknown, fallback: string): string => (err instanceof Error ? err.message : fallback);
 
 export function App(props: AppProps): React.JSX.Element {
   const [loaded, setLoaded] = useState<{ readonly adapter: StorageAdapter; readonly workspace: Workspace } | null>(null);
@@ -36,7 +35,7 @@ export function App(props: AppProps): React.JSX.Element {
       .then((ws) => { if (!cancelled) setLoaded({ adapter: props.storageAdapter, workspace: ws }); })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(toErrorMessage(err, 'Failed to load workspace.'));
+          setError(formatError(err, 'Failed to load workspace.'));
           setLoaded({ adapter: props.storageAdapter, workspace: Workspace.empty() });
         }
       });
@@ -46,7 +45,7 @@ export function App(props: AppProps): React.JSX.Element {
   const commitWorkspace = useCallback((next: Workspace) => {
     setError(null);
     setLoaded({ adapter: props.storageAdapter, workspace: next });
-    void next.save(props.storageAdapter).catch((err: unknown) => setError(toErrorMessage(err, 'Failed to save workspace.')));
+    void next.save(props.storageAdapter).catch((err: unknown) => setError(formatError(err, 'Failed to save workspace.')));
   }, [props.storageAdapter]);
 
   const workspace = loaded?.adapter === props.storageAdapter ? loaded.workspace : null;

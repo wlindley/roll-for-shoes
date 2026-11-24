@@ -2,6 +2,7 @@ import type React from 'react';
 import { useState } from 'react';
 import type { Workspace } from '../../campaign';
 import type { DiceRoller } from '../../dice';
+import { formatError } from '../error';
 import { CharacterCard } from './CharacterCard';
 import { CreateCharacterDialog } from './CreateCharacterDialog';
 
@@ -23,7 +24,7 @@ export function CharacterGrid(props: CharacterGridProps): React.JSX.Element {
     try {
       onChange(workspace.activeCampaign.removeCharacter(characterId));
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Unable to remove character.');
+      onError(formatError(err, 'Unable to remove character.'));
     }
   };
 

@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useId, useRef, useState } from 'react';
 import type { Workspace } from '../../campaign';
+import { formatError } from '../error';
 import { ActionMenu } from './ActionMenu';
 
 export interface CampaignSidebarProps {
@@ -25,7 +26,7 @@ export function CampaignSidebar(props: CampaignSidebarProps): React.JSX.Element 
       onChange(fn());
       return true;
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : fallback);
+      onError(formatError(err, fallback));
       return false;
     }
   };
@@ -61,7 +62,7 @@ export function CampaignSidebar(props: CampaignSidebarProps): React.JSX.Element 
       onChange(workspace.importCampaign(await file.text()));
       onClose();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed to import campaign.');
+      onError(formatError(err, 'Failed to import campaign.'));
     } finally {
       input.value = '';
     }
