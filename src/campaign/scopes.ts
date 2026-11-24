@@ -96,21 +96,35 @@ export class ScopedCheckBuilder<TRoot> {
   }
 }
 
+export class ScopedClaimableAdvancement<TRoot> {
+  constructor(
+    private readonly campaign: Campaign,
+    private readonly wrap: (nextCampaign: Campaign) => TRoot,
+    private readonly claimable: { claim(): AdvancementOutcome },
+  ) {
+    Object.freeze(this);
+  }
+
+  claim(): TRoot & { readonly advancement: AdvancementOutcome } {
+    const advancement = this.claimable.claim();
+    return Object.freeze({ ...this.wrap(this.campaign.replaceCharacter(advancement.character)), advancement });
+  }
+}
+
 export class ScopedAdvancementBuilder<TRoot> {
   constructor(private readonly campaign: Campaign, private readonly wrap: (nextCampaign: Campaign) => TRoot, private readonly advancementBuilder: CharacterAdvancementBuilder) {
     Object.freeze(this);
   }
 
-  replacingSkill(skillIdOrName: string): ScopedAdvancementBuilder<TRoot> {
-    return new ScopedAdvancementBuilder(this.campaign, this.wrap, this.advancementBuilder.replacingSkill(skillIdOrName));
+  replacingSkill(skillIdOrName: string): ScopedClaimableAdvancement<TRoot> {
+    return new ScopedClaimableAdvancement(this.campaign, this.wrap, this.advancementBuilder.replacingSkill(skillIdOrName));
   }
 
-  purchasingSlot(): ScopedAdvancementBuilder<TRoot> {
-    return new ScopedAdvancementBuilder(this.campaign, this.wrap, this.advancementBuilder.purchasingSlot());
+  purchasingSlot(): ScopedClaimableAdvancement<TRoot> {
+    return new ScopedClaimableAdvancement(this.campaign, this.wrap, this.advancementBuilder.purchasingSlot());
   }
 
   claim(): TRoot & { readonly advancement: AdvancementOutcome } {
-    const advancement = this.advancementBuilder.claim();
-    return Object.freeze({ ...this.wrap(this.campaign.replaceCharacter(advancement.character)), advancement });
+    return new ScopedClaimableAdvancement(this.campaign, this.wrap, this.advancementBuilder).claim();
   }
 }

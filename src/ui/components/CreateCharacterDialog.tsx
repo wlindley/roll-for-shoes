@@ -65,10 +65,11 @@ export function CreateCharacterDialog(props: CreateCharacterDialogProps): React.
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      let builder = Character.builder(name);
-      if (portrait) builder = builder.withPortrait(portrait);
-      if (allowCustom) builder = startingSkills.reduce((b, row) => b.withStartingSkill(row.name, Number(row.level)), builder);
-      onChange(workspace.activeCampaign.addCharacter(builder.build()));
+      const character = Character.create(name, {
+        portrait: portrait ?? undefined,
+        startingSkills: allowCustom ? startingSkills.map((row) => ({ name: row.name, level: Number(row.level) })) : undefined,
+      });
+      onChange(workspace.activeCampaign.addCharacter(character));
       onClose();
     } catch (err: unknown) {
       setDialogError(err instanceof Error ? err.message : 'Unable to create character.');

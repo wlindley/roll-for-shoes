@@ -1,6 +1,6 @@
 import { assertPositiveInt, type DieValue } from '../dice';
 import type { CheckOutcome } from '../checks';
-import { AdvancementOutcome, CharacterAdvancementBuilder, PendingAdvancement } from './advancement';
+import { AdvancementOutcome, type AdvancementSlotStrategy, CharacterAdvancementBuilder, PendingAdvancement } from './advancement';
 import { CharacterCheckBuilder } from './check-builders';
 import { bindCharacterFactory, deserializeCharacter, serializeCharacter } from './serialize';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
@@ -10,34 +10,36 @@ import type { Status } from './status';
 const normalizePortrait = (portrait: string | null): string | undefined =>
   portrait === null ? undefined : requireNonBlank(portrait, 'Character portrait');
 
+export interface CharacterCreateOptions {
+  readonly id?: string;
+  readonly portrait?: string;
+  readonly startingSkills?: readonly { readonly name: string; readonly level: number }[];
+}
+
 export class CharacterBuilder {
   constructor(
-    private readonly factory: (id: string | undefined, name: string, portrait: string | undefined) => Character,
     private readonly name: string,
     private readonly id?: string,
     private readonly portrait?: string,
-    private readonly startingSkills: readonly (readonly [string, number])[] = [],
+    private readonly startingSkills: readonly { readonly name: string; readonly level: number }[] = [],
   ) {
     Object.freeze(this);
   }
 
   withId(id: string): CharacterBuilder {
-    return new CharacterBuilder(this.factory, this.name, id, this.portrait, this.startingSkills);
+    return new CharacterBuilder(this.name, id, this.portrait, this.startingSkills);
   }
 
   withPortrait(portrait: string | null): CharacterBuilder {
-    return new CharacterBuilder(this.factory, this.name, this.id, normalizePortrait(portrait), this.startingSkills);
+    return new CharacterBuilder(this.name, this.id, normalizePortrait(portrait), this.startingSkills);
   }
 
   withStartingSkill(name: string, level: number): CharacterBuilder {
-    return new CharacterBuilder(this.factory, this.name, this.id, this.portrait, [...this.startingSkills, [name, level]]);
+    return new CharacterBuilder(this.name, this.id, this.portrait, [...this.startingSkills, { name, level }]);
   }
 
   build(): Character {
-    return this.startingSkills.reduce(
-      (character, [name, level]) => character.addSkill(name, level),
-      this.factory(this.id, this.name, this.portrait),
-    );
+    return Character.create(this.name, { id: this.id, portrait: this.portrait, startingSkills: this.startingSkills });
   }
 }
 
@@ -77,28 +79,23 @@ export class Character {
     bindCharacterFactory((p) => new Character(p.id, p.name, p.xp, p.skills, p.pendingAdvancement, p.statuses, p.purchasedSlots, p.portrait));
   }
 
-  static create(name: string, options?: { readonly id?: string; readonly portrait?: string }): Character {
-    let builder = Character.builder(name);
-    if (options?.id !== undefined) builder = builder.withId(options.id);
-    if (options?.portrait !== undefined) builder = builder.withPortrait(options.portrait);
-    return builder.build();
+  static create(name: string, options?: CharacterCreateOptions): Character {
+    const portrait = options?.portrait !== undefined ? normalizePortrait(options.portrait) : undefined;
+    const base = new Character(
+      resolveId(options?.id),
+      requireNonBlank(name, 'Character name'),
+      0,
+      [new Skill({ name: DEFAULT_STARTING_SKILL_NAME, level: 1 })],
+      null,
+      [],
+      {},
+      portrait,
+    );
+    return (options?.startingSkills ?? []).reduce((character, skill) => character.addSkill(skill.name, skill.level), base);
   }
 
   static builder(name: string): CharacterBuilder {
-    return new CharacterBuilder(
-      (id, rawName, portrait) =>
-        new Character(
-          resolveId(id),
-          requireNonBlank(rawName, 'Character name'),
-          0,
-          [new Skill({ name: DEFAULT_STARTING_SKILL_NAME, level: 1 })],
-          null,
-          [],
-          {},
-          portrait,
-        ),
-      name,
-    );
+    return new CharacterBuilder(name);
   }
 
   static deserialize(serialized: string): Character {
@@ -188,20 +185,21 @@ export class Character {
   }
 
   /** @internal */
-  claimAdvancement(newSkillName: string, slotConfig: SkillSlotConfig | null, replaceSkillIdOrName: string | undefined, purchaseSlot: boolean): AdvancementOutcome {
+  claimAdvancement(newSkillName: string, slotConfig: SkillSlotConfig | null, strategy: AdvancementSlotStrategy): AdvancementOutcome {
     const pending = this.pendingAdvancement;
     if (!pending) throw new Error('No pending advancement to claim');
     let base: Character = this;
-    if (purchaseSlot) {
+    if (strategy.kind === 'purchase-slot') {
       if (!slotConfig) throw new Error('SkillSlotConfig is required to purchase a slot');
       base = this.purchaseSkillSlot(pending.targetLevel, slotConfig);
     }
     if (base.xp < pending.xpCostToAdvance) throw new Error('Insufficient XP to claim advancement');
+    const replaceSkillIdOrName = strategy.kind === 'replace' ? strategy.replacedSkillIdOrName : undefined;
     const { skills, created, replaced } = base.insertSkill(newSkillName, pending.targetLevel, {
       parentSkillId: pending.usedSkillId, slotConfig, replaceSkillIdOrName,
     });
     const next = base.copy({ xp: base.xp - pending.xpCostToAdvance, skills, pendingAdvancement: null });
-    const slotCost = purchaseSlot ? SkillSlotConfig.slotCostForLevel(pending.targetLevel) : 0;
+    const slotCost = strategy.kind === 'purchase-slot' ? SkillSlotConfig.slotCostForLevel(pending.targetLevel) : 0;
     return new AdvancementOutcome(next, created, pending.xpCostToAdvance, slotCost, replaced);
   }
 

@@ -54,26 +54,51 @@ export class AdvancementOutcome {
   }
 }
 
-export class CharacterAdvancementBuilder {
+export type AdvancementSlotStrategy =
+  | { readonly kind: 'direct' }
+  | { readonly kind: 'replace'; readonly replacedSkillIdOrName: string }
+  | { readonly kind: 'purchase-slot' };
+
+export class ClaimableAdvancement {
   constructor(
-    private readonly character: Character, private readonly newSkillName: string,
-    private readonly slotConfig: SkillSlotConfig | null = null, private readonly replaceSkillIdOrName?: string,
-    private readonly purchaseSlot = false,
-  ) { Object.freeze(this); }
-
-  withSlotConfig(slotConfig: SkillSlotConfig | null): CharacterAdvancementBuilder {
-    return new CharacterAdvancementBuilder(this.character, this.newSkillName, slotConfig, this.replaceSkillIdOrName, this.purchaseSlot);
-  }
-
-  replacingSkill(skillIdOrName: string): CharacterAdvancementBuilder {
-    return new CharacterAdvancementBuilder(this.character, this.newSkillName, this.slotConfig, skillIdOrName, this.purchaseSlot);
-  }
-
-  purchasingSlot(): CharacterAdvancementBuilder {
-    return new CharacterAdvancementBuilder(this.character, this.newSkillName, this.slotConfig, this.replaceSkillIdOrName, true);
+    private readonly character: Character,
+    private readonly newSkillName: string,
+    private readonly slotConfig: SkillSlotConfig | null,
+    private readonly strategy: AdvancementSlotStrategy,
+  ) {
+    Object.freeze(this);
   }
 
   claim(): AdvancementOutcome {
-    return this.character.claimAdvancement(this.newSkillName, this.slotConfig, this.replaceSkillIdOrName, this.purchaseSlot);
+    return this.character.claimAdvancement(this.newSkillName, this.slotConfig, this.strategy);
+  }
+}
+
+export class CharacterAdvancementBuilder {
+  constructor(
+    private readonly character: Character,
+    private readonly newSkillName: string,
+    private readonly slotConfig: SkillSlotConfig | null = null,
+  ) {
+    Object.freeze(this);
+  }
+
+  withSlotConfig(slotConfig: SkillSlotConfig | null): CharacterAdvancementBuilder {
+    return new CharacterAdvancementBuilder(this.character, this.newSkillName, slotConfig);
+  }
+
+  replacingSkill(skillIdOrName: string): ClaimableAdvancement {
+    return new ClaimableAdvancement(this.character, this.newSkillName, this.slotConfig, {
+      kind: 'replace',
+      replacedSkillIdOrName: skillIdOrName,
+    });
+  }
+
+  purchasingSlot(): ClaimableAdvancement {
+    return new ClaimableAdvancement(this.character, this.newSkillName, this.slotConfig, { kind: 'purchase-slot' });
+  }
+
+  claim(): AdvancementOutcome {
+    return this.character.claimAdvancement(this.newSkillName, this.slotConfig, { kind: 'direct' });
   }
 }

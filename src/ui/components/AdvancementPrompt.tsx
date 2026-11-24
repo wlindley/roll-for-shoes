@@ -32,12 +32,14 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
   const handleClaim = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      let builder = workspace.activeCampaign.character(character.id).advance(newSkillName);
-      if (slotsFull) {
-        if (effectiveAction === 'replace' && selectedReplaceId) builder = builder.replacingSkill(selectedReplaceId);
-        else if (effectiveAction === 'buy') builder = builder.purchasingSlot();
-      }
-      onChange(builder.claim().workspace);
+      const base = workspace.activeCampaign.character(character.id).advance(newSkillName);
+      const claimable =
+        slotsFull && effectiveAction === 'replace' && selectedReplaceId
+          ? base.replacingSkill(selectedReplaceId)
+          : slotsFull && effectiveAction === 'buy'
+            ? base.purchasingSlot()
+            : base;
+      onChange(claimable.claim().workspace);
     } catch (err: unknown) {
       setPromptError(err instanceof Error ? err.message : 'Unable to claim advancement.');
     }
