@@ -144,3 +144,17 @@ sequenceDiagram
 | **Commit 41** | ~115 | Predetermined / physical dice support in `src/checks/` (`Check.fromDice`, `Check.withDiceValues`, `ReadyCheck.withDiceValues`, `RolledOpposition.fromDice` & `withDiceValues`, dynamic `DifficultyOpposition.withDiceValues` with static-mode rejection, and count/`DieValue` validation) | `CHK-MAN-01`..`05` | Autonomous |
 | **Commit 42** | ~95 | Actor and defender physical dice support in `src/character/` (`CharacterCheckBuilder.withDiceValues`, `OpposedParticipantBuilder.withDiceValues`) and `src/campaign/` (`ScopedCheckBuilder.withDiceValues` + defender `withDiceValues` status-guard forwarding) | `CHR-MAN-01`..`03`, `CMP-MAN-01` | Autonomous |
 | **Commit 43** | ~115 | `<PhysicalDiceInput />` (`normalizePhysicalDice`, `PhysicalDiceInputProps`) in `src/ui/components/PhysicalDiceInput.tsx`, actor & opposition physical dice toggles in `CheckRollerPanel.tsx`, and `.die-select` styles in `src/ui/styles.css` | `tsc`, `vite build`, `vitest` (`UI-07`) | Autonomous |
+
+---
+
+### Milestone 8: Architectural & Type-Safety Refactoring Pass
+
+*(Historical commit rows above preserve original pre-refactoring identifiers; see [`docs/interfaces.md`](./interfaces.md) and [`docs/architecture.md`](./architecture.md) for current contracts and file layout.)*
+
+| Phase | Scope & Architectural Improvements | Verification |
+| :--- | :--- | :--- |
+| **Step 1 (Tests)** | Split monolithic tuple-heavy test files into 16 focused, single-behavior boundary suites across `src/dice`, `src/checks`, `src/character`, and `src/campaign` with zero anonymous tuple assertions. | `316`+ tests, `100%` coverage |
+| **Step 2 (`dice` & `checks`)** | Exported shared `assertPositiveInt` & `validateDiceValues` in `src/dice`; introduced discriminated `OppositionResult`, `RolledOpposition.withDice`/`fromDice`, `DifficultyOpposition.static`/`dynamic`, parameterized `CheckResult<TOpp>`, and single-purpose terminal `ReadyCheck<TOpp>`. | `tsc`, `100%` coverage |
+| **Step 3 (`character`)** | Split `check-builders.ts` & `advancement.ts`, retired `CharacterBuilder` in favor of `Character.create(name, options?)`, added `SkillSlotConfig.slotCostForLevel`, discriminated `SkillSlotSummary`, terminal `ClaimableAdvancement`, strict `removeStatus(statusId)`, and typed `CharacterSnapshot` mappers. | `tsc`, `100%` coverage |
+| **Step 4 (`campaign`)** | Replaced `Object.create` prototype delegation with `ScopedDefenderBuilder`, extracted `src/campaign/rules.ts`, discriminated `CampaignRollLogEntry`, standardized symmetric `Campaign.serialize`/`deserialize`, and enforced single-way `addCharacter(character)` + strict entity IDs (`findCharacter` + `findCharacterByName`). | `tsc`, `100%` coverage |
+| **Step 5 (`ui`) & Step 6 (`docs`)** | Extracted `error.ts` (`formatError`), `ModalDialog`, `CharacterAvatar`, `DiceRow`, and `RollSummary`; simplified `PhysicalDiceInput` to nullable-array `value`; refactored `CheckRollerPanel` to discriminated `OppositionFormState` (fixing independent actor/defender status toggles); narrowed leaf component props; unified `App` `activeDialog`; and synced all Markdown docs. | `tsc`, `vite build`, `325` tests (`100%` coverage) |

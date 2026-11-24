@@ -12,18 +12,20 @@ Foundational six-sided dice (`d6`) primitives, immutable roll results, unbiased 
 - **Narrow `DiceRoller` Interface (ISP & DIP)**: Exposes a single method—`roll(count: number): DiceRoll`—keeping the abstraction minimal (call `roll(1)` for a single die). Domain builders and helpers (`Check`, `RolledOpposition`, `DifficultyOpposition`, `Character`, `Status.roll`) accept a `DiceRoller` rather than coupling to concrete RNG APIs.
 - **Immutable `DiceRoll` with Computed `total` Getter (DRY)**: `DiceRoll` defensively shallow-copies and freezes its `dice` array (`Object.freeze([...dice])`) on construction and computes `get total()` dynamically on access (`reduce`), ensuring rolled faces and their sum can never drift out of sync.
 - **Unbiased Cryptographic `RandomDiceRoller`**: Production `DiceRoller` wired at application startup ([`../main.tsx`](../main.tsx)). Fills byte buffers via an injectable `RandomBytesSource` (defaulting to `globalThis.crypto.getRandomValues`) and applies **rejection sampling (`byte < 252`)** so every `d6` face (`1..6`) has an exact `42 / 252 = 1 / 6` probability with zero modulo bias.
-- **Deterministic FIFO `StubDiceRoller` (Sole Cross-Module Test Double)**: Queues predetermined `DieValue` results, validates every face at construction and `enqueue(...)`, and consumes dice in strict First-In, First-Out (FIFO) order. Under the workspace testing rules ([`../../AGENTS.md`](../../AGENTS.md)), `StubDiceRoller` (alongside `RandomDiceRoller`'s optional `RandomBytesSource` inside [`./dice.test.ts`](./dice.test.ts)) is the **only** stub or fake permitted across the entire codebase; all higher-level module tests run real production implementations driven by `StubDiceRoller`.
+- **Deterministic FIFO `StubDiceRoller` (Sole Cross-Module Test Double)**: Queues predetermined `DieValue` results, validates every face at construction and `enqueue(...)`, and consumes dice in strict First-In, First-Out (FIFO) order. Under the workspace testing rules ([`../../AGENTS.md`](../../AGENTS.md)), `StubDiceRoller` (alongside `RandomDiceRoller`'s optional `RandomBytesSource` inside [`./random-dice-roller.test.ts`](./random-dice-roller.test.ts)) is the **only** stub or fake permitted across the entire codebase; all higher-level module tests run real production implementations driven by `StubDiceRoller`.
+- **Shared Validation Helpers (`assertPositiveInt`, `validateDiceValues`)**: Centralizes positive-integer pool size checks and `DieValue` array length/face validation + freezing across `src/dice`, `src/checks`, `src/character`, and `src/campaign`.
 
 ### Internal File Layout
 
 | File | Responsibility |
 | :--- | :--- |
 | [`./index.ts`](./index.ts) | Public module barrel re-exporting all public types, functions, interfaces, and classes. |
-| [`./types.ts`](./types.ts) | `DieValue` union (`1..6`), `isDieValue` type guard, `DiceRoller` interface, and internal positive-integer roll count validation (`assertValidRollCount`). |
+| [`./types.ts`](./types.ts) | `DieValue` union (`1..6`), `isDieValue` type guard, `assertPositiveInt`, `validateDiceValues`, and `DiceRoller` interface. |
 | [`./dice-roll.ts`](./dice-roll.ts) | Immutable `DiceRoll` value class (`readonly dice` + computed `get total()`). |
 | [`./random-dice-roller.ts`](./random-dice-roller.ts) | `RandomBytesSource` callback type and unbiased cryptographic `RandomDiceRoller`. |
 | [`./stub-dice-roller.ts`](./stub-dice-roller.ts) | Deterministic FIFO `StubDiceRoller` with upfront validation and non-destructive error handling. |
-| [`./dice.test.ts`](./dice.test.ts) | Vitest boundary test suite (`DICE-01` through `DICE-11`). |
+| [`./dice-roll.test.ts`](./dice-roll.test.ts) | Focused Vitest boundary tests for `isDieValue`, `assertPositiveInt`, `validateDiceValues`, `DiceRoll`, and `StubDiceRoller`. |
+| [`./random-dice-roller.test.ts`](./random-dice-roller.test.ts) | Focused Vitest boundary tests for `RandomDiceRoller` and `RandomBytesSource` rejection sampling. |
 
 ---
 
@@ -79,7 +81,7 @@ console.log(roller.remaining); // 3
 
 ### Testing `RandomDiceRoller` Deterministically via `RandomBytesSource`
 
-Inside `dice.test.ts`, pass a custom `RandomBytesSource` to verify byte-to-face mapping (`((byte % 6) + 1)`) and rejection sampling of bytes `>= 252` without relying on nondeterministic OS entropy:
+Inside `random-dice-roller.test.ts`, pass a custom `RandomBytesSource` to verify byte-to-face mapping (`((byte % 6) + 1)`) and rejection sampling of bytes `>= 252` without relying on nondeterministic OS entropy:
 
 ```ts
 import { RandomDiceRoller, type RandomBytesSource } from '../dice';
@@ -137,7 +139,7 @@ console.log(roll.total); // 12
 Every symbol exported by [`src/dice/index.ts`](./index.ts):
 
 ```ts
-export { type DieValue, isDieValue, type DiceRoller } from './types';
+export { assertPositiveInt, type DiceRoller, type DieValue, isDieValue, validateDiceValues } from './types';
 export { DiceRoll } from './dice-roll';
 export { StubDiceRoller } from './stub-dice-roller';
 export { RandomDiceRoller, type RandomBytesSource } from './random-dice-roller';
@@ -145,27 +147,20 @@ export { RandomDiceRoller, type RandomBytesSource } from './random-dice-roller';
 
 ---
 
-### `DieValue`
+### `DieValue`, `isDieValue`, `assertPositiveInt` & `validateDiceValues`
 
 ```ts
 export type DieValue = 1 | 2 | 3 | 4 | 5 | 6;
-```
 
-Literal union type representing all valid face values of a standard six-sided die (`d6`).
-
----
-
-### `isDieValue`
-
-```ts
 export function isDieValue(value: unknown): value is DieValue;
+export function assertPositiveInt(value: number, label: string): void;
+export function validateDiceValues(dice: readonly DieValue[], expectedCount: number): readonly DieValue[];
 ```
 
-Runtime type guard checking whether an arbitrary `unknown` value is a valid `DieValue`.
-
-- **Returns**: `true` if and only if `typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 6`.
-- **Rejects (`false`)**: `0`, `7`, negative numbers (`-1`), decimals (`3.5`), `NaN`, `Infinity`, `-Infinity`, numeric strings (`'6'`), `null`, `undefined`, and objects.
-- **Throws**: Never throws.
+- **`DieValue`**: Literal union type representing all valid face values of a standard six-sided die (`d6`).
+- **`isDieValue(value)`**: Runtime type guard returning `true` iff `typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 6` (never throws).
+- **`assertPositiveInt(value, label)`**: Throws `RangeError` (`"${label} must be a positive integer, received ${value}"`) if `!Number.isInteger(value) || value < 1`.
+- **`validateDiceValues(dice, expectedCount)`**: Validates `dice.length === expectedCount` and `dice.every(isDieValue)` (throwing `RangeError` on mismatch or invalid face) and returns a defensively copied, frozen `readonly DieValue[]`.
 
 ---
 

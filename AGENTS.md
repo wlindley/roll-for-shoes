@@ -30,7 +30,7 @@ Cross-module imports MUST go exclusively through public `index.ts` entrypoints (
 
 ## 4. Testing & Stubbing Mandate
 - Automated Vitest boundary tests are required for `src/dice`, `src/checks`, `src/character`, and `src/campaign`, covering **every** public class, method, getter, and documented error condition.
-- **ONLY `DiceRoller` (`StubDiceRoller` from `src/dice`, plus `RandomDiceRoller`'s optional byte-source parameter inside `dice.test.ts`) may be stubbed or faked in tests.**
+- **ONLY `DiceRoller` (`StubDiceRoller` from `src/dice`, plus `RandomDiceRoller`'s optional byte-source parameter inside `random-dice-roller.test.ts`) may be stubbed or faked in tests.**
 - **NEVER** use `vi.mock`, `vi.fn`, `vi.spyOn`, or custom stubs/fakes for `checks`, `character`, `campaign`, or `StorageAdapter`. All tests above `src/dice` must execute real production implementations end-to-end.
 - `src/ui` has **no** automated unit/component test suite; verify UI changes via `npm run typecheck`, `npm run build`, and existing domain `npm test` suites.
 

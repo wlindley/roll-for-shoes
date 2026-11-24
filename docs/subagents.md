@@ -47,7 +47,7 @@ Where they live:
 - **Guardrails**:
   - Cover **every** public class, constructor, method, fluent builder step, getter, and error condition scheduled for the commit (including symmetric opponent cases and distinct invalid-value cases).
   - Verify immutability on state-transforming methods: assert both that the original instance is unchanged **and** that the returned instance is a distinct object (`next !== prev`).
-  - **NEVER** write real production implementation logic, and **NEVER** use `vi.mock`, `vi.fn`, `vi.spyOn`, or any fake/stub other than `StubDiceRoller` (and `RandomDiceRoller`'s byte-source callback inside `dice.test.ts`).
+  - **NEVER** write real production implementation logic, and **NEVER** use `vi.mock`, `vi.fn`, `vi.spyOn`, or any fake/stub other than `StubDiceRoller` (and `RandomDiceRoller`'s byte-source callback inside `random-dice-roller.test.ts`).
 
 ---
 

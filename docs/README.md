@@ -49,5 +49,5 @@ All rules from [`reference/rules.md`](../reference/rules.md) are mapped to expli
 | **Difficulty** | Integer `DifficultyTier` (`Easy = 1`, `Moderate = 2`, `Hard = 3`, `VeryHard = 4`) via `DifficultyOpposition` in static (`tier * 3`) or dynamic (`tier`d6) mode. | Commits 20–22 |
 | **Ties** | Configurable campaign rule (`tiesMode: 'fail' \| 'twist'`). In `'twist'` mode, equal totals yield `'tie'` (partial success with twist) and `0 XP`. | Commits 20–22 |
 | **Statuses** | Persistent rated character conditions (`Status.create` / `Status.roll`) and situational check modifiers. Modifies check totals while advancement still inspects **raw rolled dice** only. | Commits 23–25 |
-| **Starting Skills** | Optional custom archetype/scenario starting skills via `Character.builder(name).withStartingSkill(...)` alongside `Do Anything 1`. | Commit 26 |
+| **Starting Skills** | Optional custom archetype/scenario starting skills via `Character.create(name, { startingSkills })` alongside `Do Anything 1`. | Commit 26 |
 | **Skill Slots & Leveling** | Optional per-level slot caps (`SkillSlotConfig.triangle()`: 4x L2, 3x L3, 2x L4), skill replacement when full, and optional slot purchasing (`allowSlotPurchase`, default `false`) at `2 * level` XP. | Commits 27–29 |
