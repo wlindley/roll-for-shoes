@@ -12,8 +12,8 @@ export class WorkspaceCampaignScope {
   rename(name: string): Workspace { return this.workspace.replaceCampaign(this.campaign.rename(name)); }
   withDescription(description: string): Workspace { return this.workspace.replaceCampaign(this.campaign.withDescription(description)); }
   withRules(rulesPatch: Partial<CampaignRulesConfig>): Workspace { return this.workspace.replaceCampaign(this.campaign.withRules(rulesPatch)); }
-  addCharacter(characterOrName: Character | string): Workspace { return this.workspace.replaceCampaign(this.campaign.addCharacter(characterOrName)); }
-  removeCharacter(idOrName: string): Workspace { return this.workspace.replaceCampaign(this.campaign.removeCharacter(idOrName)); }
+  addCharacter(character: Character): Workspace { return this.workspace.replaceCampaign(this.campaign.addCharacter(character)); }
+  removeCharacter(characterId: string): Workspace { return this.workspace.replaceCampaign(this.campaign.removeCharacter(characterId)); }
 
   character(idOrName: string): CampaignCharacterScope<{ readonly workspace: Workspace; readonly campaign: Campaign }> {
     return new CampaignCharacterScope(
@@ -56,17 +56,17 @@ export class Workspace {
   }
 
   importCampaign(campaignJson: string): Workspace {
-    const parsed = Campaign.fromJson(campaignJson);
+    const parsed = Campaign.deserialize(campaignJson);
     const campaign = this.campaigns.some((c) => c.id === parsed.id) ? parsed.withFreshId() : parsed;
     return new Workspace(campaign.id, [...this.campaigns, campaign]);
   }
 
-  selectCampaign(idOrName: string): Workspace {
-    return new Workspace(this.requireCampaign(idOrName).id, this.campaigns);
+  selectCampaign(campaignId: string): Workspace {
+    return new Workspace(this.requireCampaign(campaignId).id, this.campaigns);
   }
 
-  deleteCampaign(idOrName: string): Workspace {
-    const target = this.requireCampaign(idOrName);
+  deleteCampaign(campaignId: string): Workspace {
+    const target = this.requireCampaign(campaignId);
     const remaining = this.campaigns.filter((c) => c.id !== target.id);
     const nextActiveId = this.activeCampaignId === target.id ? (remaining[0]?.id ?? null) : this.activeCampaignId;
     return new Workspace(nextActiveId, remaining);
@@ -90,17 +90,16 @@ export class Workspace {
     return new WorkspaceCampaignScope(this, active);
   }
 
-  campaign(idOrName: string): WorkspaceCampaignScope {
-    return new WorkspaceCampaignScope(this, this.requireCampaign(idOrName));
+  campaign(campaignId: string): WorkspaceCampaignScope {
+    return new WorkspaceCampaignScope(this, this.requireCampaign(campaignId));
   }
 
   serialize(): string { return serializeWorkspace(this); }
   async save(adapter: StorageAdapter): Promise<void> { await adapter.save(this.serialize()); }
 
-  private requireCampaign(idOrName: string): Campaign {
-    const normalized = idOrName.trim().toLowerCase();
-    const target = this.campaigns.find((c) => c.id === idOrName || c.name.toLowerCase() === normalized);
-    if (!target) throw new Error(`Campaign not found: ${idOrName}`);
+  private requireCampaign(campaignId: string): Campaign {
+    const target = this.campaigns.find((c) => c.id === campaignId);
+    if (!target) throw new Error(`Campaign not found: ${campaignId}`);
     return target;
   }
 }

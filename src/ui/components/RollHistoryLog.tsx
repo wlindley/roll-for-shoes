@@ -46,7 +46,7 @@ export function RollHistoryLog({ entries }: RollHistoryLogProps): React.JSX.Elem
                   </span>
                   <span className="muted">
                     {entry.kind === 'character_opposed'
-                      ? `XP: ${entry.actorName} +${entry.actorXpEarned}, ${entry.defenderName} +${entry.defenderXpEarned ?? 0}`
+                      ? `XP: ${entry.actorName} +${entry.actorXpEarned}, ${entry.defenderName} +${entry.defenderXpEarned}`
                       : `XP: +${entry.actorXpEarned}`}
                   </span>
                 </div>

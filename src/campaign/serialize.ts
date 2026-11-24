@@ -1,4 +1,4 @@
-import type { DieValue } from '../dice';
+import { assertPositiveInt, validateDiceValues, type DieValue } from '../dice';
 import { type CheckModifier, CheckResult, type OppositionResult, RolledPool, type TiesMode } from '../checks';
 import { type Character, fromCharacterSnapshot, SkillSlotConfig, toCharacterSnapshot } from '../character';
 import { type Campaign, type CampaignRollLogEntry, requireNonBlank } from './campaign';
@@ -39,7 +39,10 @@ function parseJson(serialized: string): unknown {
 
 interface PoolDto { readonly rawDice: readonly DieValue[]; readonly modifiers?: readonly CheckModifier[] }
 const toPoolDto = (pool: RolledPool): PoolDto => ({ rawDice: pool.rawDice, modifiers: pool.modifiers });
-const fromPoolDto = (raw: PoolDto): RolledPool => new RolledPool(raw.rawDice, raw.modifiers);
+const fromPoolDto = (raw: PoolDto): RolledPool => {
+  assertPositiveInt(raw.rawDice.length, 'Pool dice count');
+  return new RolledPool(validateDiceValues(raw.rawDice, raw.rawDice.length), raw.modifiers);
+};
 
 const toRollEntryDto = (e: CampaignRollLogEntry) => {
   const opp = e.checkResult.opposition;
@@ -58,17 +61,17 @@ const toRollEntryDto = (e: CampaignRollLogEntry) => {
 function fromRollEntryDto(raw: Record<string, unknown>): CampaignRollLogEntry {
   if (!VALID_KINDS.has(raw.kind)) throw new Error(`Invalid rollLog entry kind: ${String(raw.kind)}`);
   const cr = raw.checkResult as { actor: PoolDto; opposition: { total: number; label?: string; pool?: PoolDto }; tiesMode: TiesMode };
+  const actor = fromPoolDto(cr.actor);
   const opp: OppositionResult = cr.opposition.pool
     ? Object.freeze({ kind: 'rolled', total: cr.opposition.total, label: cr.opposition.label, pool: fromPoolDto(cr.opposition.pool) })
     : Object.freeze({ kind: 'static', total: cr.opposition.total, label: cr.opposition.label });
   const base = {
-    id: requireNonBlank(String(raw.id), 'Roll entry ID'),
-    timestamp: requireNonBlank(String(raw.timestamp), 'Roll timestamp'),
-    actorId: requireNonBlank(String(raw.actorId), 'Actor ID'),
-    actorName: requireNonBlank(String(raw.actorName), 'Actor name'),
-    actorSkillName: requireNonBlank(String(raw.actorSkillName), 'Actor skill'),
+    id: requireNonBlank(raw.id as string, 'Roll entry ID'),
+    timestamp: requireNonBlank(raw.timestamp as string, 'Roll timestamp'),
+    actorId: requireNonBlank(raw.actorId as string, 'Actor ID'),
+    actorName: requireNonBlank(raw.actorName as string, 'Actor name'),
+    actorSkillName: requireNonBlank(raw.actorSkillName as string, 'Actor skill'),
     actionDescription: raw.actionDescription as string | undefined,
-    checkResult: new CheckResult(fromPoolDto(cr.actor), opp, cr.tiesMode),
     actorXpEarned: Number(raw.actorXpEarned),
   };
   return Object.freeze(
@@ -76,12 +79,17 @@ function fromRollEntryDto(raw: Record<string, unknown>): CampaignRollLogEntry {
       ? {
           ...base,
           kind: 'character_opposed' as const,
-          defenderId: requireNonBlank(String(raw.defenderId), 'Defender ID'),
-          defenderName: requireNonBlank(String(raw.defenderName), 'Defender name'),
-          defenderSkillName: requireNonBlank(String(raw.defenderSkillName), 'Defender skill'),
+          defenderId: requireNonBlank(raw.defenderId as string, 'Defender ID'),
+          defenderName: requireNonBlank(raw.defenderName as string, 'Defender name'),
+          defenderSkillName: requireNonBlank(raw.defenderSkillName as string, 'Defender skill'),
           defenderXpEarned: Number(raw.defenderXpEarned),
+          checkResult: new CheckResult(
+            actor,
+            Object.freeze({ kind: 'rolled', total: cr.opposition.total, label: cr.opposition.label, pool: fromPoolDto(cr.opposition.pool!) }),
+            cr.tiesMode,
+          ),
         }
-      : { ...base, kind: 'vs_opposition' as const },
+      : { ...base, kind: 'vs_opposition' as const, checkResult: new CheckResult(actor, opp, cr.tiesMode) },
   );
 }
 
@@ -102,7 +110,7 @@ function parseSkillSlots(raw: unknown): SkillSlotConfig | null {
 
 function fromCampaignDto(raw: unknown): Campaign {
   if (!isRecord(raw) || raw.schemaVersion !== 1) throw new Error('Invalid campaign payload');
-  const [id, name, rules] = [requireNonBlank(String(raw.id), 'Campaign ID'), requireNonBlank(String(raw.name), 'Campaign name'), raw.rules as Record<string, unknown>];
+  const [id, name, rules] = [requireNonBlank(raw.id as string, 'Campaign ID'), requireNonBlank(raw.name as string, 'Campaign name'), raw.rules as Record<string, unknown>];
   if (!VALID_TIES_MODES.has(rules.tiesMode)) throw new Error('Invalid campaign rules');
   if (!Array.isArray(raw.characters)) throw new Error('Campaign characters must be an array');
   const characters = raw.characters.map(fromCharacterSnapshot);
@@ -111,8 +119,8 @@ function fromCampaignDto(raw: unknown): Campaign {
     id,
     name,
     description: typeof raw.description === 'string' ? raw.description : undefined,
-    createdAt: String(raw.createdAt),
-    updatedAt: String(raw.updatedAt),
+    createdAt: requireNonBlank(raw.createdAt as string, 'Campaign createdAt'),
+    updatedAt: requireNonBlank(raw.updatedAt as string, 'Campaign updatedAt'),
     rules: {
       tiesMode: rules.tiesMode as TiesMode,
       statusesEnabled: Boolean(rules.statusesEnabled),
@@ -124,7 +132,7 @@ function fromCampaignDto(raw: unknown): Campaign {
   });
 }
 
-export const exportCampaignJson = (campaign: Campaign): string => JSON.stringify(toCampaignDto(campaign));
+export const serializeCampaign = (campaign: Campaign): string => JSON.stringify(toCampaignDto(campaign));
 export const deserializeCampaign = (campaignJson: string): Campaign => fromCampaignDto(parseJson(campaignJson));
 export const serializeWorkspace = (ws: Workspace): string =>
   JSON.stringify({ schemaVersion: 1, activeCampaignId: ws.activeCampaignId, campaigns: ws.campaigns.map(toCampaignDto) });

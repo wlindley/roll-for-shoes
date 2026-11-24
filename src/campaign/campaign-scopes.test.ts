@@ -7,23 +7,23 @@ import { Campaign, CampaignCharacterScope, type CampaignRollLogEntry, ScopedAdva
 describe('Campaign & Workspace character fluent scopes', () => {
   it('resolves vs-opposition checks via Campaign.character and prepends newest-first rollLog entries', () => {
     const base = Campaign.create('Heist').addCharacter(Character.create('Alice')).addCharacter(Character.create('Bob'));
-    const bob = base.findCharacter('Bob')!;
+    const bob = base.findCharacterByName('Bob')!;
     const scope = base.character('  alice  ');
     const builder = scope.makeCheck('Do Anything').withAction('Pick vault');
 
     expect(scope).toBeInstanceOf(CampaignCharacterScope);
-    expect(scope.character).toBe(base.findCharacter('Alice'));
+    expect(scope.character).toBe(base.findCharacterByName('Alice'));
     expect(builder).toBeInstanceOf(ScopedCheckBuilder);
 
     const first = builder.against(new StaticOpposition(5)).roll(new StubDiceRoller([2]));
-    const second = first.campaign.character('Alice').makeCheck('Do Anything').against(RolledOpposition.withDice(1)).roll(new StubDiceRoller([6, 3]));
+    const second = first.campaign.character(scope.character.id).makeCheck('Do Anything').against(RolledOpposition.withDice(1)).roll(new StubDiceRoller([6, 3]));
     const [latestEntry, olderEntry] = second.campaign.rollLog as readonly [CampaignRollLogEntry, CampaignRollLogEntry];
 
     expect(first.campaign).not.toBe(base);
     expect(base.rollLog).toEqual([]);
     expect(first.outcome).toBeInstanceOf(CharacterCheckOutcome);
-    expect(first.campaign.findCharacter('Alice')?.xp).toBe(1);
-    expect(first.campaign.findCharacter('Bob')).toBe(bob);
+    expect(first.campaign.findCharacterByName('Alice')?.xp).toBe(1);
+    expect(first.campaign.findCharacterByName('Bob')).toBe(bob);
     expect(second.campaign.rollLog).toHaveLength(2);
     expect(olderEntry).toBe(first.campaign.rollLog[0]);
     expect(olderEntry).toMatchObject({
@@ -33,7 +33,7 @@ describe('Campaign & Workspace character fluent scopes', () => {
       actionDescription: 'Pick vault',
       actorXpEarned: 1,
     });
-    expect(olderEntry.defenderId).toBeUndefined();
+    expect('defenderId' in olderEntry).toBe(false);
     expect(latestEntry).toMatchObject({ kind: 'vs_opposition', actionDescription: undefined, actorXpEarned: 0 });
   });
 
@@ -48,8 +48,8 @@ describe('Campaign & Workspace character fluent scopes', () => {
 
     expect(result.workspace).not.toBe(ws);
     expect(result.outcome).toBeInstanceOf(OpposedCharacterCheckOutcome);
-    expect(result.campaign.findCharacter('Alice')?.pendingAdvancement?.naturalAllSixes).toBe(true);
-    expect(result.campaign.findCharacter('Bob')?.xp).toBe(1);
+    expect(result.campaign.findCharacterByName('Alice')?.pendingAdvancement?.naturalAllSixes).toBe(true);
+    expect(result.campaign.findCharacterByName('Bob')?.xp).toBe(1);
     expect(result.campaign.rollLog[0]).toMatchObject({
       kind: 'character_opposed',
       actorName: 'Alice',
@@ -118,7 +118,7 @@ describe('Campaign & Workspace character fluent scopes', () => {
     const vsChar = vsPool.campaign.character('Alice').makeCheck('Parkour').withDiceValues([3, 2])
       .againstCharacter('Bob', 'Guard', (b) => b.withStatus('Alert').withModifier('High Ground', 1).withDiceValues([6, 6])).roll(new StubDiceRoller([]));
     expect(vsChar.outcome.actorXpEarned).toBe(1);
-    expect(vsChar.campaign.findCharacter('Bob')?.pendingAdvancement?.naturalAllSixes).toBe(true);
+    expect(vsChar.campaign.findCharacterByName('Bob')?.pendingAdvancement?.naturalAllSixes).toBe(true);
   });
 
   it('claims advancements, dismisses pending advancements, and updates character portraits immutably', () => {
@@ -131,14 +131,14 @@ describe('Campaign & Workspace character fluent scopes', () => {
     const claimed = advBuilder.claim();
     expect(claimed.advancement).toBeInstanceOf(AdvancementOutcome);
     expect(claimed.advancement.createdSkill).toMatchObject({ name: 'Lockpicking', level: 2 });
-    expect(claimed.campaign.findCharacter('Alice')?.pendingAdvancement).toBeNull();
+    expect(claimed.campaign.findCharacterByName('Alice')?.pendingAdvancement).toBeNull();
 
     const dismissed = rolled.activeCampaign.character('Alice').dismissAdvancement();
-    expect(dismissed.campaign.findCharacter('Alice')?.pendingAdvancement).toBeNull();
-    expect(dismissed.campaign.findCharacter('Alice')?.xp).toBe(1);
+    expect(dismissed.campaign.findCharacterByName('Alice')?.pendingAdvancement).toBeNull();
+    expect(dismissed.campaign.findCharacterByName('Alice')?.xp).toBe(1);
 
     const updated = claimed.workspace.activeCampaign.character('Alice').update((c) => c.withPortrait('  /alice.png  '));
-    expect(updated.campaign.findCharacter('Alice')?.portrait).toBe('/alice.png');
+    expect(updated.campaign.findCharacterByName('Alice')?.portrait).toBe('/alice.png');
   });
 
   it('enforces campaign skillSlots on advance and replaces a same-level skill via replacingSkill', () => {
@@ -157,7 +157,7 @@ describe('Campaign & Workspace character fluent scopes', () => {
     expect(replaced.advancement.replacedSkill?.name).toBe('S1');
 
     const unrestricted = rolled.activeCampaign.withRules({ skillSlots: null }).activeCampaign.character('Ada').advance('S5').claim();
-    expect(unrestricted.campaign.findCharacter('Ada')?.getSkillSlotSummary(2, SkillSlotConfig.triangle()).usedSlots).toBe(5);
+    expect(unrestricted.campaign.findCharacterByName('Ada')?.getSkillSlotSummary(2, SkillSlotConfig.triangle()).usedSlots).toBe(5);
   });
 
   it('purchases an extra skill slot during scoped advancement when allowSlotPurchase is enabled, and blocks dual slot strategies', () => {
@@ -179,6 +179,6 @@ describe('Campaign & Workspace character fluent scopes', () => {
 
     const bought = claimByPurchase.claim();
     expect(bought.advancement).toMatchObject({ diceUpgradeXpSpent: 0, slotPurchaseXpSpent: 4, totalXpSpent: 4 });
-    expect(bought.campaign.findCharacter('Ada')?.xp).toBe(0);
+    expect(bought.campaign.findCharacterByName('Ada')?.xp).toBe(0);
   });
 });

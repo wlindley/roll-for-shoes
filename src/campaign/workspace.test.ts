@@ -37,17 +37,17 @@ describe('Workspace & WorkspaceCampaignScope', () => {
     expect(ws2.activeCampaign.campaign.rules.tiesMode).toBe('twist');
   });
 
-  it('selects an existing campaign by exact ID or trimmed case-insensitive name', () => {
+  it('selects an existing campaign by exact ID', () => {
     const ws = Workspace.empty().createCampaign('Heist').createCampaign('Sci-Fi');
     const [heist, scifi] = ws.campaigns;
 
-    const selectedByName = ws.selectCampaign('  HEIST  ');
-    const selectedById = selectedByName.selectCampaign(scifi!.id);
+    const selectedFirst = ws.selectCampaign(heist!.id);
+    const selectedSecond = selectedFirst.selectCampaign(scifi!.id);
 
-    expect(selectedByName).not.toBe(ws);
-    expect(selectedByName.activeCampaignId).toBe(heist!.id);
-    expect(selectedByName.tryGetActiveCampaign()).toBe(heist);
-    expect(selectedById.activeCampaignId).toBe(scifi!.id);
+    expect(selectedFirst).not.toBe(ws);
+    expect(selectedFirst.activeCampaignId).toBe(heist!.id);
+    expect(selectedFirst.tryGetActiveCampaign()).toBe(heist);
+    expect(selectedSecond.activeCampaignId).toBe(scifi!.id);
   });
 
   it('preserves activeCampaignId when deleting a non-active campaign', () => {

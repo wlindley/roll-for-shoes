@@ -47,7 +47,7 @@ export function CampaignSidebar(props: CampaignSidebarProps): React.JSX.Element 
   const handleExport = () => {
     if (!activeCampaign) return;
     const slug = activeCampaign.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'campaign';
-    const url = URL.createObjectURL(new Blob([activeCampaign.exportJson()], { type: 'application/json' }));
+    const url = URL.createObjectURL(new Blob([activeCampaign.serialize()], { type: 'application/json' }));
     const link = Object.assign(document.createElement('a'), { href: url, download: `${slug}.json` });
     link.click();
     URL.revokeObjectURL(url);

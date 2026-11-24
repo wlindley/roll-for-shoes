@@ -1,26 +1,41 @@
-import type { CheckResult } from '../checks';
-import { Character } from '../character';
+import type { CheckResult, RolledOppositionResult } from '../checks';
+import type { Character } from '../character';
 import { assertAllowedStartingSkills, BASIC_CAMPAIGN_RULES, type CampaignRulesConfig } from './rules';
 import { CampaignCharacterScope } from './scopes';
-import { bindCampaignFactory, deserializeCampaign, exportCampaignJson } from './serialize';
+import { bindCampaignFactory, deserializeCampaign, serializeCampaign } from './serialize';
 
 export { BASIC_CAMPAIGN_RULES, type CampaignRulesConfig } from './rules';
 
-export interface CampaignRollLogEntry {
+interface BaseRollLogEntry {
   readonly id: string;
   readonly timestamp: string;
-  readonly kind: 'vs_opposition' | 'character_opposed';
   readonly actorId: string;
   readonly actorName: string;
   readonly actorSkillName: string;
-  readonly defenderId?: string;
-  readonly defenderName?: string;
-  readonly defenderSkillName?: string;
   readonly actionDescription?: string;
-  readonly checkResult: CheckResult;
   readonly actorXpEarned: number;
-  readonly defenderXpEarned?: number;
 }
+
+export interface VsOppositionRollLogEntry extends BaseRollLogEntry {
+  readonly kind: 'vs_opposition';
+  readonly checkResult: CheckResult;
+}
+
+export interface CharacterOpposedRollLogEntry extends BaseRollLogEntry {
+  readonly kind: 'character_opposed';
+  readonly defenderId: string;
+  readonly defenderName: string;
+  readonly defenderSkillName: string;
+  readonly defenderXpEarned: number;
+  readonly checkResult: CheckResult<RolledOppositionResult>;
+}
+
+export type CampaignRollLogEntry = VsOppositionRollLogEntry | CharacterOpposedRollLogEntry;
+
+/** @internal */
+export type NewRollLogEntry =
+  | Omit<VsOppositionRollLogEntry, 'id' | 'timestamp'>
+  | Omit<CharacterOpposedRollLogEntry, 'id' | 'timestamp'>;
 
 export function requireNonBlank(value: string, label: string): string {
   const trimmed = value.trim();
@@ -62,7 +77,7 @@ export class Campaign {
     return new Campaign(id, requireNonBlank(name, 'Campaign name'), normalizeDescription(options?.description), now, now, rules, [], []);
   }
 
-  static fromJson(campaignJson: string): Campaign { return deserializeCampaign(campaignJson); }
+  static deserialize(campaignJson: string): Campaign { return deserializeCampaign(campaignJson); }
 
   rename(name: string): Campaign {
     return this.copy({ name: requireNonBlank(name, 'Campaign name') });
@@ -76,17 +91,17 @@ export class Campaign {
     return this.copy({ rules: { ...this.rules, ...rulesPatch } });
   }
 
-  addCharacter(characterOrName: Character | string): Campaign {
-    const candidate = typeof characterOrName === 'string' ? Character.create(characterOrName) : characterOrName;
-    assertAllowedStartingSkills(this.rules, candidate);
-    if (this.characters.some((c) => c.id === candidate.id || c.name.toLowerCase() === candidate.name.toLowerCase())) {
-      throw new Error(`Duplicate character in campaign: ${candidate.name}`);
+  addCharacter(character: Character): Campaign {
+    assertAllowedStartingSkills(this.rules, character);
+    if (this.characters.some((c) => c.id === character.id) || this.findCharacterByName(character.name) !== undefined) {
+      throw new Error(`Duplicate character in campaign: ${character.name}`);
     }
-    return this.copy({ characters: [...this.characters, candidate] });
+    return this.copy({ characters: [...this.characters, character] });
   }
 
-  removeCharacter(idOrName: string): Campaign {
-    const target = this.requireCharacter(idOrName);
+  removeCharacter(characterId: string): Campaign {
+    const target = this.findCharacter(characterId);
+    if (!target) throw new Error(`Character not found: ${characterId}`);
     return this.copy({ characters: this.characters.filter((c) => c.id !== target.id) });
   }
 
@@ -98,16 +113,20 @@ export class Campaign {
     return this.copy({ characters: next });
   }
 
-  findCharacter(idOrName: string): Character | undefined {
-    const normalized = idOrName.trim().toLowerCase();
-    return this.characters.find((c) => c.id === idOrName || c.name.toLowerCase() === normalized);
+  findCharacter(characterId: string): Character | undefined {
+    return this.characters.find((c) => c.id === characterId);
+  }
+
+  findCharacterByName(name: string): Character | undefined {
+    const normalized = name.trim().toLowerCase();
+    return this.characters.find((c) => c.name.toLowerCase() === normalized);
   }
 
   character(idOrName: string): CampaignCharacterScope<{ readonly campaign: Campaign }> {
     return new CampaignCharacterScope(this, this.requireCharacter(idOrName), (campaign) => Object.freeze({ campaign }));
   }
 
-  exportJson(): string { return exportCampaignJson(this); }
+  serialize(): string { return serializeCampaign(this); }
 
   /** @internal */
   withFreshId(): Campaign {
@@ -116,13 +135,13 @@ export class Campaign {
 
   /** @internal */
   requireCharacter(idOrName: string): Character {
-    const target = this.findCharacter(idOrName);
+    const target = this.findCharacter(idOrName) ?? this.findCharacterByName(idOrName);
     if (!target) throw new Error(`Character not found: ${idOrName}`);
     return target;
   }
 
   /** @internal */
-  recordRoll(updated: readonly Character[], entry: Omit<CampaignRollLogEntry, 'id' | 'timestamp'>): Campaign {
+  recordRoll(updated: readonly Character[], entry: NewRollLogEntry): Campaign {
     const logEntry: CampaignRollLogEntry = Object.freeze({ id: globalThis.crypto.randomUUID(), timestamp: new Date().toISOString(), ...entry });
     const characters = this.characters.map((c) => updated.find((u) => u.id === c.id) ?? c);
     return this.copy({ characters, rollLog: [logEntry, ...this.rollLog] });

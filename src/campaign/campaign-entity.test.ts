@@ -102,18 +102,19 @@ describe('Campaign entity & roster management', () => {
     expect(() => base.rename(blank)).toThrow(/campaign name cannot be blank/i);
   });
 
-  it('adds characters by name or Character instance and finds them by ID or case-insensitive name', () => {
+  it('adds Character instances and finds them by exact ID or case-insensitive name', () => {
+    const alice = Character.create('Alice');
     const bob = Character.create('Bob', { id: 'char-bob' });
-    const campaign = Campaign.create('Heist').addCharacter('Alice').addCharacter(bob);
-    const alice = campaign.characters[0]!;
+    const campaign = Campaign.create('Heist').addCharacter(alice).addCharacter(bob);
 
     expect(campaign.characters).toHaveLength(2);
     expect(alice.name).toBe('Alice');
     expect(alice.skills[0]?.name).toBe(DEFAULT_STARTING_SKILL_NAME);
     expect(campaign.findCharacter(alice.id)).toBe(alice);
-    expect(campaign.findCharacter('  ALICE  ')).toBe(alice);
+    expect(campaign.findCharacter('  ALICE  ')).toBeUndefined();
+    expect(campaign.findCharacterByName('  ALICE  ')).toBe(alice);
     expect(campaign.findCharacter('char-bob')).toBe(bob);
-    expect(campaign.findCharacter('Charlie')).toBeUndefined();
+    expect(campaign.findCharacterByName('Charlie')).toBeUndefined();
   });
 
   it('rejects characters with custom starting skills unless allowCustomStartingSkills is true', () => {
@@ -123,20 +124,19 @@ describe('Campaign entity & roster management', () => {
     expect(() => basic.addCharacter(hacker)).toThrow(/custom starting skills are disabled/i);
 
     const enabled = basic.withRules({ allowCustomStartingSkills: true }).addCharacter(hacker);
-    expect(enabled.findCharacter('Ada')?.skill('Hacking').level).toBe(2);
+    expect(enabled.findCharacterByName('Ada')?.skill('Hacking').level).toBe(2);
   });
 
-  it('rejects duplicate characters by ID or case-insensitive name and blank character names', () => {
+  it('rejects duplicate characters by ID or case-insensitive name', () => {
     const campaign = Campaign.create('Heist').addCharacter(Character.create('Alice', { id: 'char-1' }));
 
-    expect(() => campaign.addCharacter('   ')).toThrow(/character name cannot be blank/i);
     expect(() => campaign.addCharacter(Character.create('  ALICE  '))).toThrow(/duplicate character/i);
     expect(() => campaign.addCharacter(Character.create('Alicia', { id: 'char-1' }))).toThrow(/duplicate character/i);
   });
 
   it('replaces an existing character in roster order and throws on unknown character ID', () => {
     const campaign = Campaign.create('Heist').addCharacter(Character.create('Alice')).addCharacter(Character.create('Bob'));
-    const upgradedAlice = campaign.findCharacter('Alice')!.addSkill('Lockpicking', 2);
+    const upgradedAlice = campaign.findCharacterByName('Alice')!.addSkill('Lockpicking', 2);
     const updated = campaign.replaceCharacter(upgradedAlice);
 
     expect(updated).not.toBe(campaign);
@@ -145,13 +145,12 @@ describe('Campaign entity & roster management', () => {
     expect(() => campaign.replaceCharacter(Character.create('Ghost', { id: 'missing-id' }))).toThrow(/character not found/i);
   });
 
-  it('removes characters by ID or case-insensitive name and throws when missing', () => {
+  it('removes characters by ID and throws when missing', () => {
     const campaign = Campaign.create('Heist')
       .addCharacter(Character.create('Alice', { id: 'char-alice' }))
       .addCharacter(Character.create('Bob'));
 
     expect(campaign.removeCharacter('char-alice').characters.map((c) => c.name)).toEqual(['Bob']);
-    expect(campaign.removeCharacter('  bob  ').characters.map((c) => c.name)).toEqual(['Alice']);
     expect(() => campaign.removeCharacter('Charlie')).toThrow(/character not found/i);
   });
 });

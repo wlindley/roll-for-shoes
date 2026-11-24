@@ -4,7 +4,7 @@ import { CheckResult, RolledPool, StaticOpposition } from '../checks';
 import { Character, SkillSlotConfig, Status } from '../character';
 import { Campaign, LocalStorageAdapter, MemoryStorageAdapter, type StorageAdapter, Workspace } from './index';
 
-const VALID_CAMPAIGN_DTO = JSON.parse(Campaign.create('Heist', { id: 'cmp-valid' }).exportJson()) as Record<string, unknown>;
+const VALID_CAMPAIGN_DTO = JSON.parse(Campaign.create('Heist', { id: 'cmp-valid' }).serialize()) as Record<string, unknown>;
 
 describe('StorageAdapter implementations & Workspace/Campaign JSON persistence', () => {
   it('saves, loads, initializes, and clears serialized state in MemoryStorageAdapter', async () => {
@@ -88,7 +88,7 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
     expect(restored.campaigns).toHaveLength(2);
     expect(restored.campaign(sideQuestId).campaign.description).toBeUndefined();
     expect(heist.description).toBe('Vault job');
-    expect(heist.findCharacter('Alice')?.statuses[0]).toBeInstanceOf(Status);
+    expect(heist.findCharacterByName('Alice')?.statuses[0]).toBeInstanceOf(Status);
     expect(vsStatic?.checkResult).toBeInstanceOf(CheckResult);
     expect(vsStatic?.checkResult.actor).toBeInstanceOf(RolledPool);
     expect(vsStatic?.checkResult.opposition).toEqual({ kind: 'static', total: 5, label: 'Door' });
@@ -97,10 +97,10 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
     expect(vsChar?.checkResult.actor.modifiers).toEqual([{ label: 'Clean Shoe', value: 2 }]);
   });
 
-  it('exports/imports Campaign JSON and assigns a fresh ID when importing a duplicate campaign ID', () => {
+  it('serializes/deserializes Campaign JSON and assigns a fresh ID when importing a duplicate campaign ID', () => {
     const source = Campaign.create('Heist', { description: 'Crew backup' }).addCharacter(Character.create('Alice'));
-    const json = source.exportJson();
-    const parsed = Campaign.fromJson(json);
+    const json = source.serialize();
+    const parsed = Campaign.deserialize(json);
     expect(parsed).not.toBe(source);
     expect(parsed.id).toBe(source.id);
     expect(parsed.description).toBe('Crew backup');
@@ -126,16 +126,16 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
     const mem = new MemoryStorageAdapter();
     await ws.save(mem);
     const loadedCampaign = (await Workspace.load(mem)).activeCampaign.campaign;
-    const exportedCampaign = Campaign.fromJson(ws.activeCampaign.campaign.exportJson());
+    const exportedCampaign = Campaign.deserialize(ws.activeCampaign.campaign.serialize());
 
     expect(loadedCampaign.rules.skillSlots).toBeInstanceOf(SkillSlotConfig);
     expect(loadedCampaign.rules.skillSlots?.allowSlotPurchase).toBe(true);
     expect(loadedCampaign.rules.skillSlots?.baseLimitForLevel(2)).toBe(4);
-    expect(loadedCampaign.findCharacter('Alice')?.portrait).toBe('/alice.png');
-    expect(loadedCampaign.findCharacter('Bob')?.portrait).toBeUndefined();
+    expect(loadedCampaign.findCharacterByName('Alice')?.portrait).toBe('/alice.png');
+    expect(loadedCampaign.findCharacterByName('Bob')?.portrait).toBeUndefined();
     expect(exportedCampaign.rules.skillSlots).toBeInstanceOf(SkillSlotConfig);
-    expect(exportedCampaign.findCharacter('Alice')?.portrait).toBe('/alice.png');
-    expect(exportedCampaign.findCharacter('Bob')?.portrait).toBeUndefined();
+    expect(exportedCampaign.findCharacterByName('Alice')?.portrait).toBe('/alice.png');
+    expect(exportedCampaign.findCharacterByName('Bob')?.portrait).toBeUndefined();
   });
 
   it.each([
@@ -163,8 +163,8 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
     ['invalid skillSlots.limitsByLevel', JSON.stringify({ ...VALID_CAMPAIGN_DTO, rules: { ...(VALID_CAMPAIGN_DTO.rules as object), skillSlots: { limitsByLevel: 'bad' } } })],
     ['non-array characters', JSON.stringify({ ...VALID_CAMPAIGN_DTO, characters: 'bad' })],
     ['invalid rollLog entry kind', JSON.stringify({ ...VALID_CAMPAIGN_DTO, rollLog: [{ kind: 'bogus' }] })],
-  ])('rejects invalid Campaign JSON (%s) on fromJson and importCampaign', (_label, raw) => {
-    expect(() => Campaign.fromJson(raw)).toThrow();
+  ])('rejects invalid Campaign JSON (%s) on deserialize and importCampaign', (_label, raw) => {
+    expect(() => Campaign.deserialize(raw)).toThrow();
     expect(() => Workspace.empty().importCampaign(raw)).toThrow();
   });
 });
