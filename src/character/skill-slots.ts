@@ -36,11 +36,28 @@ export class SkillSlotConfig {
   }
 }
 
-export class SkillSlotSummary {
-  constructor(readonly level: number, readonly maxSlots: number | null, readonly usedSlots: number, readonly effectivePurchasedSlots: number) {
+export class UnrestrictedSkillSlotSummary {
+  readonly kind = 'unrestricted' as const;
+  constructor(readonly level: number, readonly usedSlots: number) {
+    Object.freeze(this);
+  }
+}
+
+export class CappedSkillSlotSummary {
+  readonly kind = 'capped' as const;
+  constructor(
+    readonly level: number,
+    readonly maxSlots: number,
+    readonly usedSlots: number,
+    readonly effectivePurchasedSlots: number,
+    readonly nextSlotXpCost: number | null,
+  ) {
     Object.freeze(this);
   }
 
-  get availableSlots(): number | null { return this.maxSlots === null ? null : Math.max(0, this.maxSlots - this.usedSlots); }
-  get nextSlotXpCost(): number { return SkillSlotConfig.slotCostForLevel(this.level); }
+  get availableSlots(): number {
+    return Math.max(0, this.maxSlots - this.usedSlots);
+  }
 }
+
+export type SkillSlotSummary = UnrestrictedSkillSlotSummary | CappedSkillSlotSummary;

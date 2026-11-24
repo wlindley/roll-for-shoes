@@ -15,10 +15,11 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
   const { workspace, character, pending, onChange } = props;
   const slotConfig = workspace.activeCampaign.campaign.rules.skillSlots;
   const slotSummary = character.getSkillSlotSummary(pending.targetLevel, slotConfig);
-  const slotsFull = slotSummary.availableSlots === 0;
+  const fullSlotSummary = slotSummary.kind === 'capped' && slotSummary.availableSlots === 0 ? slotSummary : null;
   const replaceableSkills = character.skills.filter((s) => s.level === pending.targetLevel);
   const canReplace = replaceableSkills.length > 0;
-  const canPurchaseSlot = Boolean(slotConfig?.allowSlotPurchase);
+  const purchaseCost = fullSlotSummary?.nextSlotXpCost ?? null;
+  const canPurchaseSlot = purchaseCost !== null;
 
   const [newSkillName, setNewSkillName] = useState('');
   const [slotAction, setSlotAction] = useState<'replace' | 'buy'>('replace');
@@ -34,9 +35,9 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
     try {
       const base = workspace.activeCampaign.character(character.id).advance(newSkillName);
       const claimable =
-        slotsFull && effectiveAction === 'replace' && selectedReplaceId
+        fullSlotSummary && effectiveAction === 'replace' && selectedReplaceId
           ? base.replacingSkill(selectedReplaceId)
-          : slotsFull && effectiveAction === 'buy'
+          : fullSlotSummary && effectiveAction === 'buy'
             ? base.purchasingSlot()
             : base;
       onChange(claimable.claim().workspace);
@@ -74,10 +75,10 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
       </div>
       {promptError && <div className="error-banner" role="alert">{promptError}</div>}
       <form className="stack" onSubmit={handleClaim}>
-        {slotsFull && (
+        {fullSlotSummary && (
           <fieldset className="stack">
-            <legend>Level {pending.targetLevel} Skill Slots Full ({slotSummary.usedSlots}/{slotSummary.maxSlots} slots used)</legend>
-            {canReplace && canPurchaseSlot && (
+            <legend>Level {pending.targetLevel} Skill Slots Full ({fullSlotSummary.usedSlots}/{fullSlotSummary.maxSlots} slots used)</legend>
+            {canReplace && purchaseCost !== null && (
               <div className="row">
                 <label className="field-inline">
                   <input type="radio" name={`${baseId}-mode`} checked={effectiveAction === 'replace'} onChange={() => setSlotAction('replace')} />
@@ -85,7 +86,7 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
                 </label>
                 <label className="field-inline">
                   <input type="radio" name={`${baseId}-mode`} checked={effectiveAction === 'buy'} onChange={() => setSlotAction('buy')} />
-                  Buy Slot +{slotSummary.nextSlotXpCost} XP
+                  Buy Slot +{purchaseCost} XP
                 </label>
               </div>
             )}
@@ -99,8 +100,8 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
             )}
             {!canReplace && (
               <p className="muted">
-                {canPurchaseSlot
-                  ? `No existing Level ${pending.targetLevel} skill to replace — claiming will Buy Slot +${slotSummary.nextSlotXpCost} XP.`
+                {purchaseCost !== null
+                  ? `No existing Level ${pending.targetLevel} skill to replace — claiming will Buy Slot +${purchaseCost} XP.`
                   : `No available slots or replaceable skills at Level ${pending.targetLevel}.`}
               </p>
             )}
@@ -112,7 +113,7 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
             <input id={`${baseId}-skill`} type="text" value={newSkillName} onChange={(e) => setNewSkillName(e.target.value)} placeholder={`Specific ${pending.usedSkillName} specialty`} required />
           </div>
           <button type="submit" className="btn btn-primary">
-            {slotsFull && effectiveAction === 'buy' ? `Buy Slot (+${slotSummary.nextSlotXpCost} XP) & Claim` : `Claim Level ${pending.targetLevel} Skill`}
+            {fullSlotSummary && effectiveAction === 'buy' && purchaseCost !== null ? `Buy Slot (+${purchaseCost} XP) & Claim` : `Claim Level ${pending.targetLevel} Skill`}
           </button>
           <button type="button" className="btn" onClick={handleDismiss}>Dismiss</button>
         </div>

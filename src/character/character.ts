@@ -4,7 +4,7 @@ import { AdvancementOutcome, type AdvancementSlotStrategy, CharacterAdvancementB
 import { CharacterCheckBuilder } from './check-builders';
 import { bindCharacterFactory, deserializeCharacter, serializeCharacter } from './serialize';
 import { DEFAULT_STARTING_SKILL_NAME, requireNonBlank, resolveId, Skill } from './skill';
-import { SkillSlotConfig, SkillSlotSummary } from './skill-slots';
+import { SkillSlotConfig, CappedSkillSlotSummary, type SkillSlotSummary, UnrestrictedSkillSlotSummary } from './skill-slots';
 import type { Status } from './status';
 
 const normalizePortrait = (portrait: string | null): string | undefined =>
@@ -12,35 +12,8 @@ const normalizePortrait = (portrait: string | null): string | undefined =>
 
 export interface CharacterCreateOptions {
   readonly id?: string;
-  readonly portrait?: string;
+  readonly portrait?: string | null;
   readonly startingSkills?: readonly { readonly name: string; readonly level: number }[];
-}
-
-export class CharacterBuilder {
-  constructor(
-    private readonly name: string,
-    private readonly id?: string,
-    private readonly portrait?: string,
-    private readonly startingSkills: readonly { readonly name: string; readonly level: number }[] = [],
-  ) {
-    Object.freeze(this);
-  }
-
-  withId(id: string): CharacterBuilder {
-    return new CharacterBuilder(this.name, id, this.portrait, this.startingSkills);
-  }
-
-  withPortrait(portrait: string | null): CharacterBuilder {
-    return new CharacterBuilder(this.name, this.id, normalizePortrait(portrait), this.startingSkills);
-  }
-
-  withStartingSkill(name: string, level: number): CharacterBuilder {
-    return new CharacterBuilder(this.name, this.id, this.portrait, [...this.startingSkills, { name, level }]);
-  }
-
-  build(): Character {
-    return Character.create(this.name, { id: this.id, portrait: this.portrait, startingSkills: this.startingSkills });
-  }
 }
 
 function findByIdOrName<T extends { readonly id: string; readonly name: string }>(
@@ -94,10 +67,6 @@ export class Character {
     return (options?.startingSkills ?? []).reduce((character, skill) => character.addSkill(skill.name, skill.level), base);
   }
 
-  static builder(name: string): CharacterBuilder {
-    return new CharacterBuilder(name);
-  }
-
   static deserialize(serialized: string): Character {
     return deserializeCharacter(serialized);
   }
@@ -127,7 +96,7 @@ export class Character {
     const remaining = replaced ? this.skills.filter((s) => s.id !== replaced.id) : this.skills;
     if (remaining.some((s) => s.name.toLowerCase() === created.name.toLowerCase())) throw new Error(`Duplicate skill name: ${created.name}`);
     const summary = this.getSkillSlotSummary(created.level, options?.slotConfig);
-    if (summary.maxSlots !== null && summary.usedSlots - (replaced ? 1 : 0) >= summary.maxSlots) {
+    if (summary.kind === 'capped' && summary.usedSlots - (replaced ? 1 : 0) >= summary.maxSlots) {
       throw new Error(`No available skill slots at level ${created.level}`);
     }
     return { skills: [...remaining, created], created, replaced };
@@ -145,19 +114,22 @@ export class Character {
     return this.copy({ statuses: [...this.statuses, status] });
   }
 
-  removeStatus(statusIdOrName: string): Character {
-    const target = this.status(statusIdOrName);
-    return this.copy({ statuses: this.statuses.filter((s) => s.id !== target.id) });
+  removeStatus(statusId: string): Character {
+    if (!this.statuses.some((s) => s.id === statusId)) throw new Error(`Status not found: ${statusId}`);
+    return this.copy({ statuses: this.statuses.filter((s) => s.id !== statusId) });
   }
 
   getSkillSlotSummary(level: number, slotConfig?: SkillSlotConfig | null): SkillSlotSummary {
     assertPositiveInt(level, 'Skill level');
     const usedSlots = this.skills.filter((s) => s.level === level).length;
-    if (!slotConfig) return new SkillSlotSummary(level, null, usedSlots, 0);
+    if (!slotConfig) return new UnrestrictedSkillSlotSummary(level, usedSlots);
     const base = slotConfig.baseLimitForLevel(level);
-    if (base === null) return new SkillSlotSummary(level, null, usedSlots, 0);
-    const effectivePurchasedSlots = slotConfig.allowSlotPurchase ? (this.purchasedSlots[level] ?? 0) : 0;
-    return new SkillSlotSummary(level, base + effectivePurchasedSlots, usedSlots, effectivePurchasedSlots);
+    if (base === null) return new UnrestrictedSkillSlotSummary(level, usedSlots);
+    if (slotConfig.allowSlotPurchase) {
+      const purchased = this.purchasedSlots[level] ?? 0;
+      return new CappedSkillSlotSummary(level, base + purchased, usedSlots, purchased, SkillSlotConfig.slotCostForLevel(level));
+    }
+    return new CappedSkillSlotSummary(level, base, usedSlots, 0, null);
   }
 
   purchaseSkillSlot(level: number, slotConfig: SkillSlotConfig): Character {

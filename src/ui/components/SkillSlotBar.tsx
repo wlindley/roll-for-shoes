@@ -32,6 +32,7 @@ export function SkillSlotBar({ workspace, character, slotConfig, onChange, onErr
     <ul className="skill-list" aria-label={`Skill slots for ${character.name}`}>
       {levels.map((level) => {
         const summary = character.getSkillSlotSummary(level, slotConfig);
+        if (summary.kind !== 'capped') return null;
         return (
           <li key={level} className="skill-item">
             <span className="row">
@@ -40,7 +41,7 @@ export function SkillSlotBar({ workspace, character, slotConfig, onChange, onErr
                 {summary.usedSlots}/{summary.maxSlots} ({summary.availableSlots} left)
               </span>
             </span>
-            {slotConfig.allowSlotPurchase && (
+            {summary.nextSlotXpCost !== null && (
               <button
                 type="button"
                 className="btn"

@@ -53,8 +53,8 @@ describe('SkillSlotConfig & getSkillSlotSummary', () => {
     const withSlotAnd5th = withSlot.addSkill('S5', 2, { slotConfig: triBuy });
     const readyWithIgnoredSlot = withSlot.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character;
 
-    expect(base.getSkillSlotSummary(2)).toMatchObject({ maxSlots: null, availableSlots: null });
-    expect(base.getSkillSlotSummary(1, triFalse).maxSlots).toBeNull();
+    expect(base.getSkillSlotSummary(2)).toMatchObject({ kind: 'unrestricted', level: 2, usedSlots: 4 });
+    expect(base.getSkillSlotSummary(1, triFalse)).toMatchObject({ kind: 'unrestricted', level: 1, usedSlots: 1 });
     expect(base.getSkillSlotSummary(3, triBuy)).toMatchObject({ maxSlots: 3, effectivePurchasedSlots: 0, nextSlotXpCost: 6 });
     expect(withSlotAnd5th.getSkillSlotSummary(2, triBuy)).toMatchObject({ maxSlots: 5, usedSlots: 5, effectivePurchasedSlots: 1, availableSlots: 0 });
     expect(withSlotAnd5th.getSkillSlotSummary(2, triFalse)).toMatchObject({ maxSlots: 4, usedSlots: 5, effectivePurchasedSlots: 0, availableSlots: 0 });

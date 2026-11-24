@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StaticOpposition } from '../checks';
 import { StubDiceRoller } from '../dice';
-import { Character, CharacterBuilder, DEFAULT_STARTING_SKILL_NAME, Skill, Status } from './index';
+import { Character, DEFAULT_STARTING_SKILL_NAME, Skill, Status } from './index';
 
 describe('Skill', () => {
   it('creates a frozen Skill with trimmed name, explicit ID, level, and parentSkillId', () => {
@@ -29,7 +29,7 @@ describe('Skill', () => {
   });
 });
 
-describe('Character.create & Character.builder', () => {
+describe('Character.create', () => {
   it('creates a frozen Character with 0 XP and Do Anything 1 by default', () => {
     const bob = Character.create('Bob');
 
@@ -60,43 +60,12 @@ describe('Character.create & Character.builder', () => {
     ]);
   });
 
-  it('builds a Character with custom id, portrait, and starting skills without mutating prior builder stages', () => {
-    const b0: CharacterBuilder = Character.builder('Ada');
-    const b1 = b0.withId('c-ada');
-    const b2 = b1.withPortrait('  data:image/png;base64,abc  ');
-    const b3 = b2.withStartingSkill('  Hacking  ', 2).withStartingSkill('Pilot', 3);
-
-    expect(b1).not.toBe(b0);
-    expect(b2).not.toBe(b1);
-    expect(b3).not.toBe(b2);
-    expect(b0.build().skills).toHaveLength(1);
-
-    const ada = b3.build();
-    expect(ada).toMatchObject({ id: 'c-ada', portrait: 'data:image/png;base64,abc' });
-    expect(ada.skills.map((s) => ({ name: s.name, level: s.level }))).toEqual([
-      { name: DEFAULT_STARTING_SKILL_NAME, level: 1 },
-      { name: 'Hacking', level: 2 },
-      { name: 'Pilot', level: 3 },
-    ]);
-  });
-
-  it('clears a staged portrait in CharacterBuilder when withPortrait(null) is called', () => {
-    const withImg = Character.builder('Ada').withPortrait('/ada.webp');
-    expect(withImg.build().portrait).toBe('/ada.webp');
-    expect(withImg.withPortrait(null).build().portrait).toBeUndefined();
-  });
-
   it.each([
     ['blank name in create', () => Character.create('   ')],
     ['blank id in create', () => Character.create('Ada', { id: '   ' })],
     ['blank portrait in create', () => Character.create('Ada', { portrait: '   ' })],
     ['duplicate Do Anything in create startingSkills', () => Character.create('Ada', { startingSkills: [{ name: '  do anything ', level: 2 }] })],
     ['duplicate custom skill in create startingSkills', () => Character.create('Ada', { startingSkills: [{ name: 'Hacking', level: 2 }, { name: ' HACKING ', level: 3 }] })],
-    ['blank name in builder', () => Character.builder('   ').build()],
-    ['blank id in builder', () => Character.builder('Ada').withId('   ').build()],
-    ['blank portrait in builder', () => Character.builder('Ada').withPortrait('\t\n')],
-    ['duplicate Do Anything starting skill', () => Character.builder('Ada').withStartingSkill('  do anything ', 2).build()],
-    ['duplicate custom starting skill', () => Character.builder('Ada').withStartingSkill('Hacking', 2).withStartingSkill(' HACKING ', 3).build()],
   ])('rejects %s', (_label, fn) => {
     expect(fn).toThrow();
   });
