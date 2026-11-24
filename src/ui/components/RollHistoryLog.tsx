@@ -41,8 +41,8 @@ export function RollHistoryLog({ entries }: RollHistoryLogProps): React.JSX.Elem
                   </span>
                   <span className="row">
                     <span>vs</span>
-                    {checkResult.opposition.pool && <DiceRow dice={checkResult.opposition.pool.rawDice} />}
-                    <span className="badge">{checkResult.opposition.pool ? 'Opposition' : 'Target'} {checkResult.opposition.total}</span>
+                    {checkResult.opposition.kind === 'rolled' && <DiceRow dice={checkResult.opposition.pool.rawDice} />}
+                    <span className="badge">{checkResult.opposition.kind === 'rolled' ? 'Opposition' : 'Target'} {checkResult.opposition.total}</span>
                   </span>
                   <span className="muted">
                     {entry.kind === 'character_opposed'

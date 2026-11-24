@@ -3,10 +3,10 @@ import type { CheckOpposition, OppositionResult } from './opposition';
 import { RolledPool } from './rolled-pool';
 import { freezeModifiers, type CheckModifier, type CheckOutcome, type TiesMode } from './types';
 
-export class CheckResult {
+export class CheckResult<TOpp extends OppositionResult = OppositionResult> {
   constructor(
     readonly actor: RolledPool,
-    readonly opposition: OppositionResult,
+    readonly opposition: TOpp,
     readonly tiesMode: TiesMode = 'fail',
   ) {}
 
@@ -19,12 +19,12 @@ export class CheckResult {
   }
 }
 
-export class ReadyCheck {
+export class ReadyCheck<TOpp extends OppositionResult = OppositionResult> {
   private readonly modifiers: readonly CheckModifier[];
 
   constructor(
     private readonly diceCount: number,
-    private readonly opposition: CheckOpposition,
+    private readonly opposition: CheckOpposition<TOpp>,
     modifiers: readonly CheckModifier[],
     private readonly tiesMode?: TiesMode,
     private readonly diceValues?: readonly DieValue[],
@@ -33,23 +33,23 @@ export class ReadyCheck {
     Object.freeze(this);
   }
 
-  withDiceValues(dice: readonly DieValue[]): ReadyCheck {
+  withDiceValues(dice: readonly DieValue[]): ReadyCheck<TOpp> {
     return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, this.tiesMode, validateDiceValues(dice, this.diceCount));
   }
 
-  withModifier(label: string, value: number): ReadyCheck {
+  withModifier(label: string, value: number): ReadyCheck<TOpp> {
     return this.withModifiers([{ label, value }]);
   }
 
-  withModifiers(modifiers: readonly CheckModifier[]): ReadyCheck {
+  withModifiers(modifiers: readonly CheckModifier[]): ReadyCheck<TOpp> {
     return new ReadyCheck(this.diceCount, this.opposition, [...this.modifiers, ...modifiers], this.tiesMode, this.diceValues);
   }
 
-  withTiesMode(tiesMode: TiesMode): ReadyCheck {
+  withTiesMode(tiesMode: TiesMode): ReadyCheck<TOpp> {
     return new ReadyCheck(this.diceCount, this.opposition, this.modifiers, tiesMode, this.diceValues);
   }
 
-  resolve(diceRoller: DiceRoller): CheckResult {
+  resolve(diceRoller: DiceRoller): CheckResult<TOpp> {
     const actorDice = this.diceValues ?? diceRoller.roll(this.diceCount).dice;
     const actor = new RolledPool(actorDice, this.modifiers);
     const opposition = this.opposition.resolve(diceRoller);
@@ -95,7 +95,7 @@ export class Check {
     return new Check(this.diceCount, this.modifiers, tiesMode, this.diceValues);
   }
 
-  against(opposition: CheckOpposition): ReadyCheck {
+  against<TOpp extends OppositionResult>(opposition: CheckOpposition<TOpp>): ReadyCheck<TOpp> {
     return new ReadyCheck(this.diceCount, opposition, this.modifiers, this.tiesMode, this.diceValues);
   }
 }

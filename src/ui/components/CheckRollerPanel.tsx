@@ -126,10 +126,12 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
           mode === 'static'
             ? new StaticOpposition(Number(staticTarget))
             : mode === 'rolled'
-              ? (oppPhysicalEnabled ? new RolledOpposition(count).withDiceValues(normalizePhysicalDice(oppPhysicalDice, count)) : new RolledOpposition(count))
-              : (difficultyMode === 'dynamic' && oppPhysicalEnabled
-                  ? new DifficultyOpposition(difficultyTier, difficultyMode).withDiceValues(normalizePhysicalDice(oppPhysicalDice, difficultyTier))
-                  : new DifficultyOpposition(difficultyTier, difficultyMode));
+              ? (oppPhysicalEnabled ? RolledOpposition.withDice(count).withDiceValues(normalizePhysicalDice(oppPhysicalDice, count)) : RolledOpposition.withDice(count))
+              : (difficultyMode === 'static'
+                  ? DifficultyOpposition.static(difficultyTier)
+                  : oppPhysicalEnabled
+                    ? DifficultyOpposition.dynamic(difficultyTier).withDiceValues(normalizePhysicalDice(oppPhysicalDice, difficultyTier))
+                    : DifficultyOpposition.dynamic(difficultyTier));
         const res = builder.against(opp).roll(diceRoller);
         onChange(res.workspace);
         setLatestRoll({ campaignId: campaign.id, kind: 'vs_opposition', outcome: res.outcome });
@@ -248,8 +250,8 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
             <DiceRow dice={checkResult.actor.rawDice} />
             <span className="badge">Total {checkResult.actor.finalTotal} (raw {checkResult.actor.rawTotal})</span>
             <span>vs</span>
-            {checkResult.opposition.pool && <DiceRow dice={checkResult.opposition.pool.rawDice} />}
-            <span className="badge">{checkResult.opposition.pool ? 'Opposition' : 'Target'} {checkResult.opposition.total}</span>
+            {checkResult.opposition.kind === 'rolled' && <DiceRow dice={checkResult.opposition.pool.rawDice} />}
+            <span className="badge">{checkResult.opposition.kind === 'rolled' ? 'Opposition' : 'Target'} {checkResult.opposition.total}</span>
           </div>
           <p className="muted">
             {activeRoll.kind === 'vs_opposition' ? `XP earned: +${activeRoll.outcome.xpEarned} XP` : `XP earned: ${activeRoll.outcome.actor.name} +${activeRoll.outcome.actorXpEarned} XP, ${activeRoll.outcome.defender.name} +${activeRoll.outcome.defenderXpEarned} XP`}

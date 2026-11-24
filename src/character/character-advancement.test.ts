@@ -29,7 +29,7 @@ describe('Character.advance & AdvancementOutcome', () => {
 
   it('retains +1 failure XP when claiming a 0-XP natural all-6s advancement on a failed opposed roll', () => {
     const bob = Character.create('Bob');
-    const check = bob.makeCheck('Do Anything').against(new RolledOpposition(2)).roll(new StubDiceRoller([6, 5, 5]));
+    const check = bob.makeCheck('Do Anything').against(RolledOpposition.withDice(2)).roll(new StubDiceRoller([6, 5, 5]));
     const outcome = check.character.advance('Parkour').claim();
 
     expect(check.checkResult.outcome).toBe('failure');

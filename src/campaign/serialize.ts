@@ -1,5 +1,5 @@
 import type { DieValue } from '../dice';
-import { type CheckModifier, CheckResult, RolledPool, type TiesMode } from '../checks';
+import { type CheckModifier, CheckResult, type OppositionResult, RolledPool, type TiesMode } from '../checks';
 import { Character, SkillSlotConfig } from '../character';
 import { Campaign, type CampaignRollLogEntry, requireNonBlank } from './campaign';
 import { Workspace } from './workspace';
@@ -16,19 +16,26 @@ interface PoolDto { readonly rawDice: readonly DieValue[]; readonly modifiers?: 
 const toPoolDto = (pool: RolledPool): PoolDto => ({ rawDice: pool.rawDice, modifiers: pool.modifiers });
 const fromPoolDto = (raw: PoolDto): RolledPool => new RolledPool(raw.rawDice, raw.modifiers);
 
-const toRollEntryDto = (e: CampaignRollLogEntry) => ({
-  ...e,
-  checkResult: {
-    actor: toPoolDto(e.checkResult.actor),
-    opposition: { total: e.checkResult.opposition.total, label: e.checkResult.opposition.label, pool: e.checkResult.opposition.pool && toPoolDto(e.checkResult.opposition.pool) },
-    tiesMode: e.checkResult.tiesMode,
-  },
-});
+const toRollEntryDto = (e: CampaignRollLogEntry) => {
+  const opp = e.checkResult.opposition;
+  return {
+    ...e,
+    checkResult: {
+      actor: toPoolDto(e.checkResult.actor),
+      opposition: opp.kind === 'rolled'
+        ? { kind: 'rolled' as const, total: opp.total, label: opp.label, pool: toPoolDto(opp.pool) }
+        : { kind: 'static' as const, total: opp.total, label: opp.label },
+      tiesMode: e.checkResult.tiesMode,
+    },
+  };
+};
 
 function fromRollEntryDto(raw: Record<string, unknown>): CampaignRollLogEntry {
   if (!VALID_KINDS.has(raw.kind)) throw new Error(`Invalid rollLog entry kind: ${String(raw.kind)}`);
   const cr = raw.checkResult as { actor: PoolDto; opposition: { total: number; label?: string; pool?: PoolDto }; tiesMode: TiesMode };
-  const opp = Object.freeze({ total: cr.opposition.total, label: cr.opposition.label, pool: cr.opposition.pool ? fromPoolDto(cr.opposition.pool) : undefined });
+  const opp: OppositionResult = cr.opposition.pool
+    ? Object.freeze({ kind: 'rolled', total: cr.opposition.total, label: cr.opposition.label, pool: fromPoolDto(cr.opposition.pool) })
+    : Object.freeze({ kind: 'static', total: cr.opposition.total, label: cr.opposition.label });
   return Object.freeze({ ...(raw as Omit<CampaignRollLogEntry, 'checkResult'>), checkResult: new CheckResult(fromPoolDto(cr.actor), opp, cr.tiesMode) });
 }
 

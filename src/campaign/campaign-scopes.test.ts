@@ -16,7 +16,7 @@ describe('Campaign & Workspace character fluent scopes', () => {
     expect(builder).toBeInstanceOf(ScopedCheckBuilder);
 
     const first = builder.against(new StaticOpposition(5)).roll(new StubDiceRoller([2]));
-    const second = first.campaign.character('Alice').makeCheck('Do Anything').against(new RolledOpposition(1)).roll(new StubDiceRoller([6, 3]));
+    const second = first.campaign.character('Alice').makeCheck('Do Anything').against(RolledOpposition.withDice(1)).roll(new StubDiceRoller([6, 3]));
     const [latestEntry, olderEntry] = second.campaign.rollLog as readonly [CampaignRollLogEntry, CampaignRollLogEntry];
 
     expect(first.campaign).not.toBe(base);

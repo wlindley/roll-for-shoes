@@ -24,7 +24,7 @@ describe('Check — Static & Opposed Resolution', () => {
     expect(result.actor.finalTotal).toBe(9);
     expect(result.opposition.total).toBe(6);
     expect(result.opposition.label).toBe('Guard');
-    expect(result.opposition.pool).toBeUndefined();
+    expect(result.opposition.kind).toBe('static');
     expect(result.margin).toBe(3);
     expect(roller.remaining).toBe(0);
   });
@@ -38,28 +38,28 @@ describe('Check — Static & Opposed Resolution', () => {
 
   it('resolves opposed check in deterministic FIFO order (actor first, opposition second)', () => {
     const roller = new StubDiceRoller([5, 6, 2, 3]);
-    const result = Check.withDice(2).against(new RolledOpposition(2, { label: 'Rival' })).resolve(roller);
+    const result = Check.withDice(2).against(RolledOpposition.withDice(2, { label: 'Rival' })).resolve(roller);
 
     expect(result.actor.rawDice).toEqual([5, 6]);
-    expect(result.opposition.pool?.rawDice).toEqual([2, 3]);
+    expect(result.opposition.pool.rawDice).toEqual([2, 3]);
     expect(result.outcome).toBe('success');
     expect(result.margin).toBe(6);
     expect(roller.remaining).toBe(0);
   });
 
   it('resolves opposed check failure with negative margin', () => {
-    const result = Check.withDice(2).against(new RolledOpposition(2)).resolve(new StubDiceRoller([1, 2, 4, 5]));
+    const result = Check.withDice(2).against(RolledOpposition.withDice(2)).resolve(new StubDiceRoller([1, 2, 4, 5]));
 
     expect(result.outcome).toBe('failure');
     expect(result.margin).toBe(-6);
   });
 
   it('detects opponent single-die and multi-die natural all-6s even when opponent loses', () => {
-    const singleSix = Check.withDice(1).against(new RolledOpposition(1)).resolve(new StubDiceRoller([3, 6]));
-    expect(singleSix.opposition.pool?.naturalAllSixes).toBe(true);
-    expect(singleSix.opposition.pool?.nonSixCount).toBe(0);
+    const singleSix = Check.withDice(1).against(RolledOpposition.withDice(1)).resolve(new StubDiceRoller([3, 6]));
+    expect(singleSix.opposition.pool.naturalAllSixes).toBe(true);
+    expect(singleSix.opposition.pool.nonSixCount).toBe(0);
 
-    const multiSixLoss = Check.withDice(3).against(new RolledOpposition(2)).resolve(new StubDiceRoller([5, 5, 5, 6, 6]));
+    const multiSixLoss = Check.withDice(3).against(RolledOpposition.withDice(2)).resolve(new StubDiceRoller([5, 5, 5, 6, 6]));
     expect(multiSixLoss.outcome).toBe('success');
     expect(multiSixLoss.opposition.pool?.naturalAllSixes).toBe(true);
     expect(multiSixLoss.opposition.pool?.nonSixCount).toBe(0);
@@ -81,11 +81,11 @@ describe('Check & CheckResult — TiesMode ("fail" vs "twist")', () => {
     expect(staticTie.margin).toBe(0);
     expect(staticTie.outcome).toBe('failure');
 
-    const opposedTie = Check.withDice(2).against(new RolledOpposition(2)).resolve(new StubDiceRoller([3, 4, 2, 5]));
+    const opposedTie = Check.withDice(2).against(RolledOpposition.withDice(2)).resolve(new StubDiceRoller([3, 4, 2, 5]));
     expect(opposedTie.margin).toBe(0);
     expect(opposedTie.outcome).toBe('failure');
 
-    const directResult = new CheckResult(new RolledPool([3]), { total: 3 });
+    const directResult = new CheckResult(new RolledPool([3]), { kind: 'static', total: 3 });
     expect(directResult.tiesMode).toBe('fail');
     expect(directResult.outcome).toBe('failure');
   });
@@ -105,7 +105,7 @@ describe('Check & CheckResult — TiesMode ("fail" vs "twist")', () => {
   });
 
   it('resolves ties as "tie" when withTiesMode("twist") is set on ReadyCheck after against() immutably', () => {
-    const baseReady = Check.withDice(2).against(new DifficultyOpposition(DifficultyTier.Hard, 'dynamic'));
+    const baseReady = Check.withDice(2).against(DifficultyOpposition.dynamic(DifficultyTier.Hard));
     const twistReady = baseReady.withTiesMode('twist');
 
     expect(twistReady).not.toBe(baseReady);
@@ -128,7 +128,7 @@ describe('Check & CheckResult — TiesMode ("fail" vs "twist")', () => {
 describe('Check & ReadyCheck — Predetermined Dice & Validation', () => {
   it('skips actor dice rolling with Check.fromDice while still rolling opposition', () => {
     const roller = new StubDiceRoller([3, 4]);
-    const result = Check.fromDice([6, 2]).against(new RolledOpposition(2)).resolve(roller);
+    const result = Check.fromDice([6, 2]).against(RolledOpposition.withDice(2)).resolve(roller);
 
     expect(result.actor.rawDice).toEqual([6, 2]);
     expect(result.opposition.pool?.rawDice).toEqual([3, 4]);

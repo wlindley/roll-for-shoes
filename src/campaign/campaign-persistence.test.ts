@@ -88,9 +88,9 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
     expect(heist.findCharacter('Alice')?.statuses[0]).toBeInstanceOf(Status);
     expect(vsStatic?.checkResult).toBeInstanceOf(CheckResult);
     expect(vsStatic?.checkResult.actor).toBeInstanceOf(RolledPool);
-    expect(vsStatic?.checkResult.opposition).toEqual({ total: 5, label: 'Door', pool: undefined });
+    expect(vsStatic?.checkResult.opposition).toEqual({ kind: 'static', total: 5, label: 'Door' });
     expect(vsStatic?.checkResult.margin).toBe(-3);
-    expect(vsChar?.checkResult.opposition.pool).toBeInstanceOf(RolledPool);
+    expect(vsChar?.checkResult.opposition).toMatchObject({ kind: 'rolled', pool: expect.any(RolledPool) });
     expect(vsChar?.checkResult.actor.modifiers).toEqual([{ label: 'Clean Shoe', value: 2 }]);
   });
 

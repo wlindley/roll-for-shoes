@@ -1,5 +1,5 @@
 import { validateDiceValues, type DiceRoller, type DieValue } from '../dice';
-import { Check, type CheckModifier, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type TiesMode } from '../checks';
+import { Check, type CheckModifier, type CheckOpposition, type CheckOutcome, type CheckResult, RolledOpposition, type RolledOppositionResult, type TiesMode } from '../checks';
 import type { Character } from './character';
 import { resolveId, type Skill } from './skill';
 import type { SkillSlotConfig } from './skill-slots';
@@ -144,7 +144,7 @@ export class CharacterCheckBuilder {
   ): ReadyOpposedCharacterCheck {
     const defenderSkill = defender.skill(defenderSkillIdOrName);
     const configured = configureDefender ? configureDefender(new OpposedParticipantBuilder(defender, defenderSkill.level)) : undefined;
-    const defenderOpposition = new RolledOpposition(defenderSkill.level, { modifiers: configured?.modifiers, diceValues: configured?.diceValues });
+    const defenderOpposition = RolledOpposition.withDice(defenderSkill.level, { modifiers: configured?.modifiers, diceValues: configured?.diceValues });
     return new ReadyOpposedCharacterCheck(
       this.character, this.skillUsed, defender, defenderSkill, defenderOpposition, this.actionDescription, this.tiesMode, this.modifiers, this.diceValues,
     );
@@ -157,7 +157,7 @@ export class OpposedCharacterCheckOutcome {
     readonly defender: Character,
     readonly actorSkill: Skill,
     readonly defenderSkill: Skill,
-    readonly checkResult: CheckResult,
+    readonly checkResult: CheckResult<RolledOppositionResult>,
   ) {
     Object.freeze(this);
   }
@@ -202,7 +202,7 @@ export class ReadyOpposedCharacterCheck {
     );
     const nextDefender = this.defender.applyRoll(
       this.defenderSkill,
-      checkResult.opposition.pool!.rawDice,
+      checkResult.opposition.pool.rawDice,
       defenderOutcome,
       xpForOutcome(defenderOutcome),
     );

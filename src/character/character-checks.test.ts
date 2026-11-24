@@ -47,7 +47,7 @@ describe('Character.makeCheck & PendingAdvancement lifecycle', () => {
 
   it('leaves pendingAdvancement null when nonSixCount exceeds XP, then unlocks once banked XP suffices', () => {
     const bob = Character.create('Bob').addSkill('Climbing', 2);
-    const failed = bob.makeCheck('Climbing').against(new DifficultyOpposition(DifficultyTier.Moderate)).roll(new StubDiceRoller([2, 3]));
+    const failed = bob.makeCheck('Climbing').against(DifficultyOpposition.static(DifficultyTier.Moderate)).roll(new StubDiceRoller([2, 3]));
     const unlocked = failed.character.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([4]));
 
     expect(failed.character.xp).toBe(1);
@@ -164,7 +164,7 @@ describe('Physical / predetermined dice on character checks', () => {
     const defRoller = new StubDiceRoller([3, 3]);
     const actRoller = new StubDiceRoller([2, 3]);
 
-    const vsOpp = alice.makeCheck('Climb').withDiceValues([6, 6]).against(new RolledOpposition(2)).roll(oppRoller);
+    const vsOpp = alice.makeCheck('Climb').withDiceValues([6, 6]).against(RolledOpposition.withDice(2)).roll(oppRoller);
     const actorManual = alice.makeCheck('Climb').withDiceValues([5, 4]).againstCharacter(bob, 'Block').roll(defRoller);
     const defManual = alice.makeCheck('Climb').againstCharacter(bob, 'Block', (b) => b.withDiceValues([4, 4])).roll(actRoller);
     const bothManual = alice.makeCheck('Climb').withDiceValues([6, 5]).againstCharacter(bob, 'Block', (b) => b.withDiceValues([6, 6])).roll(new StubDiceRoller([]));
