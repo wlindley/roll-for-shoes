@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useId, useState } from 'react';
-import type { Workspace } from '../../campaign';
+import type { CampaignRulesConfig } from '../../campaign';
 import { SkillSlotConfig } from '../../character';
 import type { TiesMode } from '../../checks';
 import { formatError } from '../error';
@@ -9,14 +9,14 @@ import { ModalDialog } from './ModalDialog';
 type SlotMode = 'unlimited' | 'triangle';
 
 export interface CampaignSettingsDialogProps {
-  readonly workspace: Workspace;
   readonly open: boolean;
+  readonly campaignName: string;
+  readonly rules: CampaignRulesConfig;
+  readonly onSaveRules: (patch: Partial<CampaignRulesConfig>) => void;
   readonly onClose: () => void;
-  readonly onChange: (next: Workspace) => void;
 }
 
-function CampaignSettingsForm({ workspace, onClose, onChange }: Omit<CampaignSettingsDialogProps, 'open'>): React.JSX.Element {
-  const rules = workspace.activeCampaign.campaign.rules;
+function CampaignSettingsForm({ rules, onSaveRules, onClose }: Omit<CampaignSettingsDialogProps, 'open' | 'campaignName'>): React.JSX.Element {
   const [tiesMode, setTiesMode] = useState<TiesMode>(rules.tiesMode);
   const [statusesEnabled, setStatusesEnabled] = useState(rules.statusesEnabled);
   const [allowCustomStartingSkills, setAllowCustomStartingSkills] = useState(rules.allowCustomStartingSkills);
@@ -29,7 +29,7 @@ function CampaignSettingsForm({ workspace, onClose, onChange }: Omit<CampaignSet
     event.preventDefault();
     try {
       const skillSlots = slotMode === 'triangle' ? SkillSlotConfig.triangle({ allowSlotPurchase }) : null;
-      onChange(workspace.activeCampaign.withRules({ tiesMode, statusesEnabled, allowCustomStartingSkills, skillSlots }));
+      onSaveRules({ tiesMode, statusesEnabled, allowCustomStartingSkills, skillSlots });
       onClose();
     } catch (err: unknown) {
       setDialogError(formatError(err, 'Unable to update campaign rules.'));
@@ -71,10 +71,10 @@ function CampaignSettingsForm({ workspace, onClose, onChange }: Omit<CampaignSet
   );
 }
 
-export function CampaignSettingsDialog({ workspace, open, onClose, onChange }: CampaignSettingsDialogProps): React.JSX.Element {
+export function CampaignSettingsDialog({ open, campaignName, rules, onSaveRules, onClose }: CampaignSettingsDialogProps): React.JSX.Element {
   return (
-    <ModalDialog open={open} title="Campaign Rules" onClose={onClose}>
-      {open && <CampaignSettingsForm workspace={workspace} onClose={onClose} onChange={onChange} />}
+    <ModalDialog open={open} title={`Campaign Rules — ${campaignName}`} onClose={onClose}>
+      {open && <CampaignSettingsForm rules={rules} onSaveRules={onSaveRules} onClose={onClose} />}
     </ModalDialog>
   );
 }

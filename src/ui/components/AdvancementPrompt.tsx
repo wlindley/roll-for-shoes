@@ -1,20 +1,18 @@
 import type React from 'react';
 import { useId, useState } from 'react';
-import type { Workspace } from '../../campaign';
-import type { Character, PendingAdvancement } from '../../character';
+import type { Character, PendingAdvancement, SkillSlotConfig } from '../../character';
 import { formatError } from '../error';
 import { DiceRow } from './DiceRow';
 
 export interface AdvancementPromptProps {
-  readonly workspace: Workspace;
   readonly character: Character;
   readonly pending: PendingAdvancement;
-  readonly onChange: (next: Workspace) => void;
+  readonly slotConfig: SkillSlotConfig | null;
+  readonly onUpdateCharacter: (transform: (character: Character) => Character) => void;
 }
 
 export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Element {
-  const { workspace, character, pending, onChange } = props;
-  const slotConfig = workspace.activeCampaign.campaign.rules.skillSlots;
+  const { character, pending, slotConfig, onUpdateCharacter } = props;
   const slotSummary = character.getSkillSlotSummary(pending.targetLevel, slotConfig);
   const fullSlotSummary = slotSummary.kind === 'capped' && slotSummary.availableSlots === 0 ? slotSummary : null;
   const replaceableSkills = character.skills.filter((s) => s.level === pending.targetLevel);
@@ -34,14 +32,16 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
   const handleClaim = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const base = workspace.activeCampaign.character(character.id).advance(newSkillName);
-      const claimable =
-        fullSlotSummary && effectiveAction === 'replace' && selectedReplaceId
-          ? base.replacingSkill(selectedReplaceId)
-          : fullSlotSummary && effectiveAction === 'buy'
-            ? base.purchasingSlot()
-            : base;
-      onChange(claimable.claim().workspace);
+      onUpdateCharacter((c) => {
+        const base = c.advance(newSkillName).withSlotConfig(slotConfig);
+        const claimable =
+          fullSlotSummary && effectiveAction === 'replace' && selectedReplaceId
+            ? base.replacingSkill(selectedReplaceId)
+            : fullSlotSummary && effectiveAction === 'buy'
+              ? base.purchasingSlot()
+              : base;
+        return claimable.claim().character;
+      });
     } catch (err: unknown) {
       setPromptError(formatError(err, 'Unable to claim advancement.'));
     }
@@ -49,7 +49,7 @@ export function AdvancementPrompt(props: AdvancementPromptProps): React.JSX.Elem
 
   const handleDismiss = () => {
     try {
-      onChange(workspace.activeCampaign.character(character.id).dismissAdvancement().workspace);
+      onUpdateCharacter((c) => c.dismissAdvancement());
     } catch (err: unknown) {
       setPromptError(formatError(err, 'Unable to dismiss advancement.'));
     }

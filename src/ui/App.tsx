@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useId, useState } from 'react';
-import { type StorageAdapter, Workspace } from '../campaign';
+import { type Campaign, type StorageAdapter, Workspace } from '../campaign';
 import type { DiceRoller } from '../dice';
 import { ActionMenu } from './components/ActionMenu';
 import { AdvancementPrompt } from './components/AdvancementPrompt';
@@ -19,13 +19,14 @@ export interface AppProps {
   readonly storageAdapter: StorageAdapter;
 }
 
+type ActiveDialog = 'none' | 'rename' | 'rules';
+
 export function App(props: AppProps): React.JSX.Element {
   const [loaded, setLoaded] = useState<{ readonly adapter: StorageAdapter; readonly workspace: Workspace } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedActorId, setSelectedActorId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
+  const [activeDialog, setActiveDialog] = useState<ActiveDialog>('none');
   const sidebarId = useId();
 
   useEffect(() => {
@@ -50,6 +51,10 @@ export function App(props: AppProps): React.JSX.Element {
 
   const workspace = loaded?.adapter === props.storageAdapter ? loaded.workspace : null;
   const activeCampaign = workspace?.tryGetActiveCampaign() ?? null;
+  const commitCampaign = useCallback(
+    (nextCampaign: Campaign) => { if (workspace) commitWorkspace(workspace.replaceCampaign(nextCampaign)); },
+    [workspace, commitWorkspace],
+  );
   const showSidebar = Boolean(workspace) && (sidebarOpen || !activeCampaign);
   const effectiveActorId = activeCampaign?.characters.some((c) => c.id === selectedActorId)
     ? selectedActorId
@@ -99,8 +104,8 @@ export function App(props: AppProps): React.JSX.Element {
                     label="Campaign Options"
                     align="right"
                     items={[
-                      { label: 'Rename Campaign…', onSelect: () => setRenameOpen(true) },
-                      { label: 'Campaign Rules…', onSelect: () => setRulesOpen(true) },
+                      { label: 'Rename Campaign…', onSelect: () => setActiveDialog('rename') },
+                      { label: 'Campaign Rules…', onSelect: () => setActiveDialog('rules') },
                     ]}
                   />
                 </div>
@@ -119,42 +124,43 @@ export function App(props: AppProps): React.JSX.Element {
             </section>
             <RenameCampaignDialog
               key={`rename-${activeCampaign.id}`}
-              workspace={workspace}
-              open={renameOpen}
-              onClose={() => setRenameOpen(false)}
-              onChange={commitWorkspace}
+              open={activeDialog === 'rename'}
+              currentName={activeCampaign.name}
+              onRename={(name) => commitCampaign(activeCampaign.rename(name))}
+              onClose={() => setActiveDialog('none')}
             />
             <CampaignSettingsDialog
               key={`rules-${activeCampaign.id}`}
-              workspace={workspace}
-              open={rulesOpen}
-              onClose={() => setRulesOpen(false)}
-              onChange={commitWorkspace}
+              open={activeDialog === 'rules'}
+              campaignName={activeCampaign.name}
+              rules={activeCampaign.rules}
+              onSaveRules={(patch) => commitCampaign(activeCampaign.withRules(patch))}
+              onClose={() => setActiveDialog('none')}
             />
             <CharacterGrid
-              workspace={workspace}
+              campaign={activeCampaign}
               diceRoller={props.diceRoller}
               selectedActorId={effectiveActorId}
               onSelectActor={setSelectedActorId}
-              onChange={commitWorkspace}
+              onCampaignChange={commitCampaign}
               onError={setError}
             />
             <CheckRollerPanel
-              workspace={workspace}
+              campaign={activeCampaign}
               diceRoller={props.diceRoller}
               selectedActorId={effectiveActorId}
               onSelectActor={setSelectedActorId}
-              onChange={commitWorkspace}
+              onCampaignChange={commitCampaign}
               onError={setError}
             />
             {activeCampaign.characters.map((c) =>
               c.pendingAdvancement ? (
                 <AdvancementPrompt
                   key={c.pendingAdvancement.rollId}
-                  workspace={workspace}
                   character={c}
                   pending={c.pendingAdvancement}
-                  onChange={commitWorkspace}
+                  slotConfig={activeCampaign.rules.skillSlots}
+                  onUpdateCharacter={(fn) => commitCampaign(activeCampaign.character(c.id).update(fn).campaign)}
                 />
               ) : null,
             )}

@@ -1,6 +1,5 @@
 import type React from 'react';
 import { useId, useRef, useState } from 'react';
-import type { Workspace } from '../../campaign';
 import { Character, DEFAULT_STARTING_SKILL_NAME } from '../../character';
 import { formatError } from '../error';
 import { encodePortraitFile } from '../portrait-image';
@@ -8,10 +7,10 @@ import { CharacterAvatar } from './CharacterAvatar';
 import { ModalDialog } from './ModalDialog';
 
 export interface CreateCharacterDialogProps {
-  readonly workspace: Workspace;
   readonly open: boolean;
+  readonly allowCustomStartingSkills: boolean;
+  readonly onAddCharacter: (character: Character) => void;
   readonly onClose: () => void;
-  readonly onChange: (next: Workspace) => void;
 }
 
 interface StartingSkillRow {
@@ -20,8 +19,7 @@ interface StartingSkillRow {
   readonly level: string;
 }
 
-function CreateCharacterForm({ workspace, onClose, onChange }: Omit<CreateCharacterDialogProps, 'open'>): React.JSX.Element {
-  const allowCustom = workspace.activeCampaign.campaign.rules.allowCustomStartingSkills;
+function CreateCharacterForm({ allowCustomStartingSkills, onAddCharacter, onClose }: Omit<CreateCharacterDialogProps, 'open'>): React.JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nextRowKey = useRef(0);
   const [name, setName] = useState('');
@@ -53,9 +51,9 @@ function CreateCharacterForm({ workspace, onClose, onChange }: Omit<CreateCharac
     try {
       const character = Character.create(name, {
         portrait: portrait ?? undefined,
-        startingSkills: allowCustom ? startingSkills.map((row) => ({ name: row.name, level: Number(row.level) })) : undefined,
+        startingSkills: allowCustomStartingSkills ? startingSkills.map((row) => ({ name: row.name, level: Number(row.level) })) : undefined,
       });
-      onChange(workspace.activeCampaign.addCharacter(character));
+      onAddCharacter(character);
       onClose();
     } catch (err: unknown) {
       setDialogError(formatError(err, 'Unable to create character.'));
@@ -79,7 +77,7 @@ function CreateCharacterForm({ workspace, onClose, onChange }: Omit<CreateCharac
           )}
         </div>
       </div>
-        {allowCustom && (
+        {allowCustomStartingSkills && (
           <fieldset className="stack">
             <legend>Custom Starting Skills</legend>
             <p className="muted">{DEFAULT_STARTING_SKILL_NAME} (1d6) is always included automatically.</p>
@@ -127,10 +125,10 @@ function CreateCharacterForm({ workspace, onClose, onChange }: Omit<CreateCharac
   );
 }
 
-export function CreateCharacterDialog({ workspace, open, onClose, onChange }: CreateCharacterDialogProps): React.JSX.Element {
+export function CreateCharacterDialog({ open, allowCustomStartingSkills, onAddCharacter, onClose }: CreateCharacterDialogProps): React.JSX.Element {
   return (
     <ModalDialog open={open} title="New Character" onClose={onClose}>
-      {open && <CreateCharacterForm workspace={workspace} onClose={onClose} onChange={onChange} />}
+      {open && <CreateCharacterForm allowCustomStartingSkills={allowCustomStartingSkills} onAddCharacter={onAddCharacter} onClose={onClose} />}
     </ModalDialog>
   );
 }

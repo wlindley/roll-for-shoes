@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useId, useState } from 'react';
-import type { ScopedDefenderBuilder, Workspace } from '../../campaign';
+import type { Campaign, ScopedDefenderBuilder } from '../../campaign';
 import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome, Status } from '../../character';
 import { type CheckOpposition, DifficultyOpposition, DifficultyTier, RolledOpposition, StaticOpposition } from '../../checks';
 import type { DiceRoller, DieValue } from '../../dice';
@@ -9,11 +9,11 @@ import { normalizePhysicalDice, PhysicalDiceInput } from './PhysicalDiceInput';
 import { RollSummary } from './RollSummary';
 
 export interface CheckRollerPanelProps {
-  readonly workspace: Workspace;
+  readonly campaign: Campaign;
   readonly diceRoller: DiceRoller;
   readonly selectedActorId: string | null;
   readonly onSelectActor: (characterId: string) => void;
-  readonly onChange: (next: Workspace) => void;
+  readonly onCampaignChange: (next: Campaign) => void;
   readonly onError: (message: string) => void;
 }
 
@@ -105,8 +105,7 @@ function resetOppositionDice(opp: OppositionFormState): OppositionFormState {
 }
 
 export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Element {
-  const { workspace, diceRoller, selectedActorId, onSelectActor, onChange, onError } = props;
-  const campaign = workspace.activeCampaign.campaign;
+  const { campaign, diceRoller, selectedActorId, onSelectActor, onCampaignChange, onError } = props;
   const characters = campaign.characters;
 
   const [actorState, setActorState] = useState<ActorCheckState>(INITIAL_ACTOR_STATE);
@@ -147,7 +146,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
     event.preventDefault();
     try {
       const trimmedAction = actorState.actionDescription.trim();
-      let builder = workspace.activeCampaign.character(actor.id).makeCheck(actorSkill.id);
+      let builder = campaign.character(actor.id).makeCheck(actorSkill.id);
       if (trimmedAction) builder = builder.withAction(trimmedAction);
       if (actorState.actorPhysicalDice !== null) {
         builder = builder.withDiceValues(normalizePhysicalDice(actorState.actorPhysicalDice, actorSkill.level));
@@ -170,11 +169,11 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
             }
           : undefined;
         const res = builder.againstCharacter(defender.id, defenderSkill.id, configureDef).roll(diceRoller);
-        onChange(res.workspace);
+        onCampaignChange(res.campaign);
         setLatestRoll({ campaignId: campaign.id, kind: 'character_opposed', outcome: res.outcome });
       } else {
         const res = builder.against(buildVsOpposition(opposition)).roll(diceRoller);
-        onChange(res.workspace);
+        onCampaignChange(res.campaign);
         setLatestRoll({ campaignId: campaign.id, kind: 'vs_opposition', outcome: res.outcome });
       }
       setActorState((prev) => ({

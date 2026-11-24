@@ -1,20 +1,18 @@
 import type React from 'react';
 import { useId, useState } from 'react';
-import type { Workspace } from '../../campaign';
 import { type Character, Status } from '../../character';
 import type { DiceRoller } from '../../dice';
 import { formatError } from '../error';
 
 export interface StatusManagerProps {
-  readonly workspace: Workspace;
   readonly character: Character;
+  readonly statusesEnabled: boolean;
   readonly diceRoller: DiceRoller;
-  readonly onChange: (next: Workspace) => void;
+  readonly onUpdateCharacter: (transform: (character: Character) => Character) => void;
   readonly onError: (message: string) => void;
 }
 
-export function StatusManager({ workspace, character, diceRoller, onChange, onError }: StatusManagerProps): React.JSX.Element | null {
-  const statusesEnabled = workspace.activeCampaign.campaign.rules.statusesEnabled;
+export function StatusManager({ character, statusesEnabled, diceRoller, onUpdateCharacter, onError }: StatusManagerProps): React.JSX.Element | null {
   const [name, setName] = useState('');
   const [entryMode, setEntryMode] = useState<'fixed' | 'roll'>('fixed');
   const [rating, setRating] = useState('-2');
@@ -26,7 +24,7 @@ export function StatusManager({ workspace, character, diceRoller, onChange, onEr
 
   const runUpdate = (fn: (c: Character) => Character, fallback: string): boolean => {
     try {
-      onChange(workspace.activeCampaign.character(character.id).update(fn).workspace);
+      onUpdateCharacter(fn);
       return true;
     } catch (err: unknown) {
       onError(formatError(err, fallback));

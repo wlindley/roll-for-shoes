@@ -1,17 +1,15 @@
 import type React from 'react';
-import type { Workspace } from '../../campaign';
 import type { Character, SkillSlotConfig } from '../../character';
 import { formatError } from '../error';
 
 export interface SkillSlotBarProps {
-  readonly workspace: Workspace;
   readonly character: Character;
   readonly slotConfig: SkillSlotConfig;
-  readonly onChange: (next: Workspace) => void;
+  readonly onPurchaseSlot: (level: number) => void;
   readonly onError: (message: string) => void;
 }
 
-export function SkillSlotBar({ workspace, character, slotConfig, onChange, onError }: SkillSlotBarProps): React.JSX.Element {
+export function SkillSlotBar({ character, slotConfig, onPurchaseSlot, onError }: SkillSlotBarProps): React.JSX.Element {
   const highestLevel = Math.max(
     2,
     ...Object.keys(slotConfig.limitsByLevel).map(Number),
@@ -23,7 +21,7 @@ export function SkillSlotBar({ workspace, character, slotConfig, onChange, onErr
 
   const handleBuySlot = (level: number) => {
     try {
-      onChange(workspace.activeCampaign.character(character.id).update((c) => c.purchaseSkillSlot(level, slotConfig)).workspace);
+      onPurchaseSlot(level);
     } catch (err: unknown) {
       onError(formatError(err, 'Unable to purchase skill slot.'));
     }

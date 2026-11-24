@@ -1,7 +1,6 @@
 import type React from 'react';
 import { useRef } from 'react';
-import type { Workspace } from '../../campaign';
-import type { Character } from '../../character';
+import type { Character, SkillSlotConfig } from '../../character';
 import type { DiceRoller } from '../../dice';
 import { formatError } from '../error';
 import { encodePortraitFile } from '../portrait-image';
@@ -10,21 +9,21 @@ import { SkillSlotBar } from './SkillSlotBar';
 import { StatusManager } from './StatusManager';
 
 export interface CharacterCardProps {
-  readonly workspace: Workspace;
   readonly character: Character;
+  readonly statusesEnabled: boolean;
+  readonly slotConfig: SkillSlotConfig | null;
   readonly diceRoller: DiceRoller;
   readonly isSelected: boolean;
   readonly onSelectForCheck: (characterId: string) => void;
   readonly onRemove: (characterId: string) => void;
-  readonly onChange: (next: Workspace) => void;
+  readonly onUpdateCharacter: (transform: (character: Character) => Character) => void;
   readonly onError: (message: string) => void;
 }
 
 export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
-  const { workspace, character, diceRoller, isSelected, onSelectForCheck, onRemove, onChange, onError } = props;
+  const { character, statusesEnabled, slotConfig, diceRoller, isSelected, onSelectForCheck, onRemove, onUpdateCharacter, onError } = props;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pending = character.pendingAdvancement;
-  const slotConfig = workspace.activeCampaign.campaign.rules.skillSlots;
 
   const handlePortraitChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -32,7 +31,7 @@ export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
     if (!file) return;
     try {
       const url = await encodePortraitFile(file);
-      onChange(workspace.activeCampaign.character(character.id).update((c) => c.withPortrait(url)).workspace);
+      onUpdateCharacter((c) => c.withPortrait(url));
     } catch (err: unknown) {
       onError(formatError(err, 'Unable to update portrait.'));
     } finally {
@@ -42,7 +41,7 @@ export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
 
   const handleClearPortrait = () => {
     try {
-      onChange(workspace.activeCampaign.character(character.id).update((c) => c.withPortrait(null)).workspace);
+      onUpdateCharacter((c) => c.withPortrait(null));
     } catch (err: unknown) {
       onError(formatError(err, 'Unable to clear portrait.'));
     }
@@ -71,8 +70,15 @@ export function CharacterCard(props: CharacterCardProps): React.JSX.Element {
         </div>
       </div>
       {pending && <div><span className="badge badge-ready">Level {pending.targetLevel} skill ready</span></div>}
-      <StatusManager workspace={workspace} character={character} diceRoller={diceRoller} onChange={onChange} onError={onError} />
-      {slotConfig && <SkillSlotBar workspace={workspace} character={character} slotConfig={slotConfig} onChange={onChange} onError={onError} />}
+      <StatusManager character={character} statusesEnabled={statusesEnabled} diceRoller={diceRoller} onUpdateCharacter={onUpdateCharacter} onError={onError} />
+      {slotConfig && (
+        <SkillSlotBar
+          character={character}
+          slotConfig={slotConfig}
+          onPurchaseSlot={(level) => onUpdateCharacter((c) => c.purchaseSkillSlot(level, slotConfig))}
+          onError={onError}
+        />
+      )}
       <ul className="skill-list">
         {character.skills.map((skill) => {
           const parent = skill.parentSkillId ? character.skills.find((s) => s.id === skill.parentSkillId) : undefined;

@@ -1,25 +1,24 @@
 import type React from 'react';
 import { useId, useState } from 'react';
-import type { Workspace } from '../../campaign';
 import { formatError } from '../error';
 import { ModalDialog } from './ModalDialog';
 
 export interface RenameCampaignDialogProps {
-  readonly workspace: Workspace;
   readonly open: boolean;
+  readonly currentName: string;
+  readonly onRename: (name: string) => void;
   readonly onClose: () => void;
-  readonly onChange: (next: Workspace) => void;
 }
 
-function RenameCampaignForm({ workspace, onClose, onChange }: Omit<RenameCampaignDialogProps, 'open'>): React.JSX.Element {
-  const [name, setName] = useState(workspace.activeCampaign.campaign.name);
+function RenameCampaignForm({ currentName, onRename, onClose }: Omit<RenameCampaignDialogProps, 'open'>): React.JSX.Element {
+  const [name, setName] = useState(currentName);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const nameId = useId();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      onChange(workspace.activeCampaign.rename(name));
+      onRename(name);
       onClose();
     } catch (err: unknown) {
       setDialogError(formatError(err, 'Unable to rename campaign.'));
@@ -41,10 +40,10 @@ function RenameCampaignForm({ workspace, onClose, onChange }: Omit<RenameCampaig
   );
 }
 
-export function RenameCampaignDialog({ workspace, open, onClose, onChange }: RenameCampaignDialogProps): React.JSX.Element {
+export function RenameCampaignDialog({ open, currentName, onRename, onClose }: RenameCampaignDialogProps): React.JSX.Element {
   return (
     <ModalDialog open={open} title="Rename Campaign" onClose={onClose}>
-      {open && <RenameCampaignForm workspace={workspace} onClose={onClose} onChange={onChange} />}
+      {open && <RenameCampaignForm currentName={currentName} onRename={onRename} onClose={onClose} />}
     </ModalDialog>
   );
 }
