@@ -138,7 +138,9 @@ describe('Campaign & Workspace character fluent scopes', () => {
   });
 
   it('enforces campaign skillSlots on advance and replaces a same-level skill via replacingSkill', () => {
-    const ada = Character.builder('Ada').withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).withStartingSkill('S4', 2).build();
+    const ada = Character.create('Ada', {
+      startingSkills: [{ name: 'S1', level: 2 }, { name: 'S2', level: 2 }, { name: 'S3', level: 2 }, { name: 'S4', level: 2 }],
+    });
     const rolled = Workspace.empty()
       .createCampaign('Triangle', { rules: { allowCustomStartingSkills: true, skillSlots: SkillSlotConfig.triangle() } })
       .activeCampaign.addCharacter(ada)
@@ -154,17 +156,24 @@ describe('Campaign & Workspace character fluent scopes', () => {
     expect(unrestricted.campaign.findCharacter('Ada')?.getSkillSlotSummary(2, SkillSlotConfig.triangle()).usedSlots).toBe(5);
   });
 
-  it('purchases an extra skill slot during scoped advancement when allowSlotPurchase is enabled', () => {
+  it('purchases an extra skill slot during scoped advancement when allowSlotPurchase is enabled, and blocks dual slot strategies', () => {
     const slotConfig = new SkillSlotConfig({ limitsByLevel: { 2: 1 }, allowSlotPurchase: true });
     const base = Workspace.empty()
       .createCampaign('Buyable', { rules: { allowCustomStartingSkills: true, skillSlots: slotConfig } })
-      .activeCampaign.addCharacter(Character.builder('Ada').withStartingSkill('S1', 2).build());
+      .activeCampaign.addCharacter(Character.create('Ada', { startingSkills: [{ name: 'S1', level: 2 }] }));
     const rolled = ([1, 1, 1, 6] as const).reduce(
       (ws, die) => ws.activeCampaign.character('Ada').makeCheck('Do Anything').against(new StaticOpposition(10)).roll(new StubDiceRoller([die])).workspace,
       base,
     );
 
-    const bought = rolled.activeCampaign.character('Ada').advance('S2').purchasingSlot().claim();
+    const claimByReplace = rolled.activeCampaign.character('Ada').advance('S2').replacingSkill('S1');
+    const claimByPurchase = rolled.activeCampaign.character('Ada').advance('S2').purchasingSlot();
+    // @ts-expect-error ScopedClaimableAdvancement does not expose purchasingSlot
+    expect(claimByReplace.purchasingSlot).toBeUndefined();
+    // @ts-expect-error ScopedClaimableAdvancement does not expose replacingSkill
+    expect(claimByPurchase.replacingSkill).toBeUndefined();
+
+    const bought = claimByPurchase.claim();
     expect(bought.advancement).toMatchObject({ diceUpgradeXpSpent: 0, slotPurchaseXpSpent: 4, totalXpSpent: 4 });
     expect(bought.campaign.findCharacter('Ada')?.xp).toBe(0);
   });

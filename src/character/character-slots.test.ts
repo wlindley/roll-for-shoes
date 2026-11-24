@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StaticOpposition } from '../checks';
 import { StubDiceRoller } from '../dice';
-import { Character, SkillSlotConfig } from './index';
+import { Character, ClaimableAdvancement, SkillSlotConfig } from './index';
 
 function characterWithBankedXp(base: Character, xp: number): Character {
   let current = base;
@@ -46,9 +46,9 @@ describe('SkillSlotConfig & getSkillSlotSummary', () => {
   it('computes unrestricted, capped, purchased, and clamped SkillSlotSummary values', () => {
     const triFalse = SkillSlotConfig.triangle({ allowSlotPurchase: false });
     const triBuy = SkillSlotConfig.triangle({ allowSlotPurchase: true });
-    const base = Character.builder('Ada')
-      .withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).withStartingSkill('S4', 2)
-      .build();
+    const base = Character.create('Ada', {
+      startingSkills: [{ name: 'S1', level: 2 }, { name: 'S2', level: 2 }, { name: 'S3', level: 2 }, { name: 'S4', level: 2 }],
+    });
     const withSlot = characterWithBankedXp(base, 4).purchaseSkillSlot(2, triBuy);
     const withSlotAnd5th = withSlot.addSkill('S5', 2, { slotConfig: triBuy });
     const readyWithIgnoredSlot = withSlot.makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character;
@@ -64,10 +64,12 @@ describe('SkillSlotConfig & getSkillSlotSummary', () => {
 
 describe('Slot caps, skill replacement & slot purchasing', () => {
   const makeFullL2Character = () =>
-    Character.builder('Bob')
-      .withStartingSkill('S1', 2).withStartingSkill('S2', 2).withStartingSkill('S3', 2).withStartingSkill('S4', 2)
-      .withStartingSkill('Climb', 3)
-      .build();
+    Character.create('Bob', {
+      startingSkills: [
+        { name: 'S1', level: 2 }, { name: 'S2', level: 2 }, { name: 'S3', level: 2 }, { name: 'S4', level: 2 },
+        { name: 'Climb', level: 3 },
+      ],
+    });
 
   it('blocks adding or advancing into a full level without replacement while preserving pendingAdvancement', () => {
     const tri = SkillSlotConfig.triangle();
@@ -127,7 +129,9 @@ describe('Slot caps, skill replacement & slot purchasing', () => {
 
   it('spends combined slot + dice-upgrade XP when claiming with purchasingSlot()', () => {
     const triBuy = SkillSlotConfig.triangle({ allowSlotPurchase: true });
-    const seed = Character.builder('Bob').withStartingSkill('Climb', 3).withStartingSkill('L4A', 4).withStartingSkill('L4B', 4).build();
+    const seed = Character.create('Bob', {
+      startingSkills: [{ name: 'Climb', level: 3 }, { name: 'L4A', level: 4 }, { name: 'L4B', level: 4 }],
+    });
     const ready = characterWithBankedXp(seed, 9).makeCheck('Climb').against(new StaticOpposition(10)).roll(new StubDiceRoller([6, 6, 3])).character;
 
     const claimed = ready.advance('Mastery').withSlotConfig(triBuy).purchasingSlot().claim();
@@ -138,10 +142,25 @@ describe('Slot caps, skill replacement & slot purchasing', () => {
 
   it('rejects purchasingSlot() when slotConfig is null or combined XP is insufficient', () => {
     const triBuy = SkillSlotConfig.triangle({ allowSlotPurchase: true });
-    const seed = Character.builder('Bob').withStartingSkill('Climb', 3).withStartingSkill('L4A', 4).withStartingSkill('L4B', 4).build();
+    const seed = Character.create('Bob', {
+      startingSkills: [{ name: 'Climb', level: 3 }, { name: 'L4A', level: 4 }, { name: 'L4B', level: 4 }],
+    });
     const r8 = characterWithBankedXp(seed, 8).makeCheck('Climb').against(new StaticOpposition(10)).roll(new StubDiceRoller([6, 6, 3])).character;
 
     expect(() => r8.advance('Mastery').purchasingSlot().claim()).toThrow(/SkillSlotConfig/i);
     expect(() => r8.advance('Mastery').withSlotConfig(triBuy).purchasingSlot().claim()).toThrow(/insufficient xp/i);
+  });
+
+  it('returns a terminal ClaimableAdvancement that blocks chaining replacingSkill and purchasingSlot together', () => {
+    const ready = Character.create('Bob').makeCheck('Do Anything').against(new StaticOpposition(3)).roll(new StubDiceRoller([6])).character;
+    const byReplace: ClaimableAdvancement = ready.advance('Vault').replacingSkill('S1');
+    const byPurchase: ClaimableAdvancement = ready.advance('Vault').purchasingSlot();
+
+    expect(Object.isFrozen(byReplace)).toBe(true);
+    expect(Object.isFrozen(byPurchase)).toBe(true);
+    // @ts-expect-error ClaimableAdvancement does not expose purchasingSlot
+    expect(byReplace.purchasingSlot).toBeUndefined();
+    // @ts-expect-error ClaimableAdvancement does not expose replacingSkill
+    expect(byPurchase.replacingSkill).toBeUndefined();
   });
 });

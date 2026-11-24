@@ -64,12 +64,12 @@ describe('Character statuses & check modifiers', () => {
     expect(updated.statuses).toEqual([clean]);
   });
 
-  it('removes statuses immutably by case-insensitive name or exact ID', () => {
+  it('removes statuses immutably by exact status ID', () => {
     const clean = Status.create('Clean Shoe', 2, { id: 'st-clean' });
     const nose = Status.create('Broken Nose', -3, { id: 'st-nose' });
     const seeded = Character.create('Bob').addStatus(clean).addStatus(nose);
 
-    const withoutClean = seeded.removeStatus('  CLEAN SHOE  ');
+    const withoutClean = seeded.removeStatus('st-clean');
     const withoutBoth = withoutClean.removeStatus('st-nose');
 
     expect(withoutClean).not.toBe(seeded);
@@ -88,7 +88,7 @@ describe('Character statuses & check modifiers', () => {
       .withModifier('Focus', 1)
       .against(new StaticOpposition(7))
       .roll(new StubDiceRoller([2, 3]));
-    const afterRemoval = bob.removeStatus('Clean Shoe').makeCheck('Karate').against(new StaticOpposition(7)).roll(new StubDiceRoller([2, 3]));
+    const afterRemoval = bob.removeStatus('st-clean').makeCheck('Karate').against(new StaticOpposition(7)).roll(new StubDiceRoller([2, 3]));
     const penalized = bob.makeCheck('Karate').withStatus('st-nose').against(new StaticOpposition(4)).roll(new StubDiceRoller([3, 3]));
 
     expect(boosted.checkResult.actor.finalTotal).toBe(8);

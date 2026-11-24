@@ -45,9 +45,19 @@ describe('Character.create & Character.builder', () => {
     expect(bob.skills[0]).toMatchObject({ name: DEFAULT_STARTING_SKILL_NAME, level: 1, parentSkillId: undefined });
   });
 
-  it('accepts custom id and trimmed portrait in Character.create', () => {
-    const eve = Character.create('  Eve  ', { id: 'c-eve', portrait: '  https://example.com/eve.png  ' });
+  it('accepts custom id, trimmed portrait, and trimmed startingSkills in Character.create', () => {
+    const eve = Character.create('  Eve  ', {
+      id: 'c-eve',
+      portrait: '  https://example.com/eve.png  ',
+      startingSkills: [{ name: '  Hacking  ', level: 2 }, { name: 'Pilot', level: 3 }],
+    });
+
     expect(eve).toMatchObject({ id: 'c-eve', name: 'Eve', portrait: 'https://example.com/eve.png' });
+    expect(eve.skills.map((s) => ({ name: s.name, level: s.level }))).toEqual([
+      { name: DEFAULT_STARTING_SKILL_NAME, level: 1 },
+      { name: 'Hacking', level: 2 },
+      { name: 'Pilot', level: 3 },
+    ]);
   });
 
   it('builds a Character with custom id, portrait, and starting skills without mutating prior builder stages', () => {
@@ -80,6 +90,8 @@ describe('Character.create & Character.builder', () => {
     ['blank name in create', () => Character.create('   ')],
     ['blank id in create', () => Character.create('Ada', { id: '   ' })],
     ['blank portrait in create', () => Character.create('Ada', { portrait: '   ' })],
+    ['duplicate Do Anything in create startingSkills', () => Character.create('Ada', { startingSkills: [{ name: '  do anything ', level: 2 }] })],
+    ['duplicate custom skill in create startingSkills', () => Character.create('Ada', { startingSkills: [{ name: 'Hacking', level: 2 }, { name: ' HACKING ', level: 3 }] })],
     ['blank name in builder', () => Character.builder('   ').build()],
     ['blank id in builder', () => Character.builder('Ada').withId('   ').build()],
     ['blank portrait in builder', () => Character.builder('Ada').withPortrait('\t\n')],
@@ -123,11 +135,12 @@ describe('Character.skill, addSkill & withPortrait', () => {
 
   it('updates, clears, and preserves portrait immutably across character transitions', () => {
     const base = Character.create('Bob');
+    const focused = Status.create('Focused', 1);
     const withImg = base.withPortrait('  /bob.png  ');
     const progressed = withImg
       .addSkill('Climb', 2)
-      .addStatus(Status.create('Focused', 1))
-      .removeStatus('Focused')
+      .addStatus(focused)
+      .removeStatus(focused.id)
       .makeCheck('Do Anything').against(new StaticOpposition(5)).roll(new StubDiceRoller([2]))
       .character.dismissAdvancement();
 

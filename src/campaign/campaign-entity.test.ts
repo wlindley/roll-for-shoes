@@ -117,7 +117,7 @@ describe('Campaign entity & roster management', () => {
   });
 
   it('rejects characters with custom starting skills unless allowCustomStartingSkills is true', () => {
-    const hacker = Character.builder('Ada').withStartingSkill('Hacking', 2).build();
+    const hacker = Character.create('Ada', { startingSkills: [{ name: 'Hacking', level: 2 }] });
     const basic = Campaign.create('Cyber');
 
     expect(() => basic.addCharacter(hacker)).toThrow(/custom starting skills are disabled/i);
