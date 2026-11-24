@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { StubDiceRoller } from '../dice';
 import { RolledOpposition, StaticOpposition } from '../checks';
 import { AdvancementOutcome, Character, CharacterCheckOutcome, OpposedCharacterCheckOutcome, SkillSlotConfig, Status } from '../character';
-import { Campaign, CampaignCharacterScope, type CampaignRollLogEntry, ScopedAdvancementBuilder, ScopedCheckBuilder, Workspace } from './index';
+import {
+  Campaign,
+  CampaignCharacterScope,
+  type CampaignRollLogEntry,
+  type CharacterOpposedRollLogEntry,
+  ScopedAdvancementBuilder,
+  ScopedCheckBuilder,
+  type VsOppositionRollLogEntry,
+  Workspace,
+} from './index';
 
 describe('Campaign & Workspace character fluent scopes', () => {
   it('resolves vs-opposition checks via Campaign.character and prepends newest-first rollLog entries', () => {
@@ -180,5 +189,26 @@ describe('Campaign & Workspace character fluent scopes', () => {
     const bought = claimByPurchase.claim();
     expect(bought.advancement).toMatchObject({ diceUpgradeXpSpent: 0, slotPurchaseXpSpent: 4, totalXpSpent: 4 });
     expect(bought.campaign.findCharacterByName('Ada')?.xp).toBe(0);
+  });
+
+  it('narrows CampaignRollLogEntry between VsOppositionRollLogEntry and CharacterOpposedRollLogEntry', () => {
+    const base = Campaign.create('Heist')
+      .addCharacter(Character.create('Alice', { id: 'char-alice' }))
+      .addCharacter(Character.create('Bob', { id: 'char-bob' }));
+    const afterVs = base.character('char-alice').makeCheck('Do Anything').against(new StaticOpposition(5)).roll(new StubDiceRoller([2])).campaign;
+    const afterOpposed = afterVs.character('char-alice').makeCheck('Do Anything').againstCharacter('char-bob', 'Do Anything').roll(new StubDiceRoller([6, 3])).campaign;
+    const [opposedEntry, vsEntry] = afterOpposed.rollLog as readonly [CampaignRollLogEntry, CampaignRollLogEntry];
+
+    if (vsEntry.kind !== 'vs_opposition' || opposedEntry.kind !== 'character_opposed') {
+      throw new Error('Expected narrowed rollLog entry kinds');
+    }
+    const narrowedVs: VsOppositionRollLogEntry = vsEntry;
+    const narrowedOpposed: CharacterOpposedRollLogEntry = opposedEntry;
+
+    // @ts-expect-error VsOppositionRollLogEntry does not expose defenderId
+    expect(narrowedVs.defenderId).toBeUndefined();
+    expect(narrowedOpposed.defenderId).toBe('char-bob');
+    expect(narrowedOpposed.defenderXpEarned).toBe(1);
+    expect(narrowedOpposed.checkResult.opposition.pool.rawDice).toEqual([3]);
   });
 });

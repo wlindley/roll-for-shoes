@@ -5,6 +5,22 @@ import { Character, SkillSlotConfig, Status } from '../character';
 import { Campaign, LocalStorageAdapter, MemoryStorageAdapter, type StorageAdapter, Workspace } from './index';
 
 const VALID_CAMPAIGN_DTO = JSON.parse(Campaign.create('Heist', { id: 'cmp-valid' }).serialize()) as Record<string, unknown>;
+const VALID_OPPOSED_DTO = JSON.parse(
+  Campaign.create('Heist', { id: 'cmp-opposed' })
+    .addCharacter(Character.create('Alice'))
+    .addCharacter(Character.create('Bob'))
+    .character('Alice')
+    .makeCheck('Do Anything')
+    .againstCharacter('Bob', 'Do Anything')
+    .roll(new StubDiceRoller([4, 3]))
+    .campaign.serialize(),
+) as { readonly id: string; readonly rollLog: readonly Record<string, unknown>[] };
+const BASE_ROLL_DTO = VALID_OPPOSED_DTO.rollLog[0]!;
+const BASE_CHECK_RESULT_DTO = BASE_ROLL_DTO.checkResult as {
+  readonly actor: Record<string, unknown>;
+  readonly opposition: Record<string, unknown>;
+  readonly tiesMode: string;
+};
 
 describe('StorageAdapter implementations & Workspace/Campaign JSON persistence', () => {
   it('saves, loads, initializes, and clears serialized state in MemoryStorageAdapter', async () => {
@@ -166,5 +182,33 @@ describe('StorageAdapter implementations & Workspace/Campaign JSON persistence',
   ])('rejects invalid Campaign JSON (%s) on deserialize and importCampaign', (_label, raw) => {
     expect(() => Campaign.deserialize(raw)).toThrow();
     expect(() => Workspace.empty().importCampaign(raw)).toThrow();
+  });
+
+  it.each([
+    ['blank actorName', { ...BASE_ROLL_DTO, actorName: '   ' }],
+    ['missing defenderId on character_opposed', { ...BASE_ROLL_DTO, defenderId: undefined }],
+    ['blank defenderId on character_opposed', { ...BASE_ROLL_DTO, defenderId: '   ' }],
+    ['missing opposition pool on character_opposed', {
+      ...BASE_ROLL_DTO,
+      checkResult: { ...BASE_CHECK_RESULT_DTO, opposition: { kind: 'static', total: 5 } },
+    }],
+    ['invalid die face in checkResult.actor.rawDice', {
+      ...BASE_ROLL_DTO,
+      checkResult: { ...BASE_CHECK_RESULT_DTO, actor: { rawDice: [9] } },
+    }],
+    ['empty checkResult.actor.rawDice', {
+      ...BASE_ROLL_DTO,
+      checkResult: { ...BASE_CHECK_RESULT_DTO, actor: { rawDice: [] } },
+    }],
+  ])('rejects malformed rollLog entry (%s) in Campaign.deserialize and Workspace.deserialize', (_label, badEntry) => {
+    const campaignPayload = { ...VALID_OPPOSED_DTO, rollLog: [badEntry] };
+    const workspaceJson = JSON.stringify({
+      schemaVersion: 1,
+      activeCampaignId: VALID_OPPOSED_DTO.id,
+      campaigns: [campaignPayload],
+    });
+
+    expect(() => Campaign.deserialize(JSON.stringify(campaignPayload))).toThrow();
+    expect(() => Workspace.deserialize(workspaceJson)).toThrow();
   });
 });

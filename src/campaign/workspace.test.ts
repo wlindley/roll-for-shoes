@@ -130,6 +130,26 @@ describe('Workspace & WorkspaceCampaignScope', () => {
     expect(() => ws.campaign(missing)).toThrow(/campaign not found/i);
   });
 
+  it('disambiguates duplicate-named campaigns strictly by ID and rejects display names', () => {
+    const ws = Workspace.empty().createCampaign('Heist').createCampaign('Heist');
+    const [first, second] = ws.campaigns;
+
+    expect(() => ws.selectCampaign('Heist')).toThrow(/campaign not found/i);
+    expect(() => ws.deleteCampaign('Heist')).toThrow(/campaign not found/i);
+    expect(() => ws.campaign('Heist')).toThrow(/campaign not found/i);
+
+    const selectedFirst = ws.selectCampaign(first!.id);
+    expect(selectedFirst.activeCampaignId).toBe(first!.id);
+
+    const targetedSecond = selectedFirst.campaign(second!.id).withDescription('Second crew');
+    expect(targetedSecond.campaign(first!.id).campaign.description).toBeUndefined();
+    expect(targetedSecond.campaign(second!.id).campaign.description).toBe('Second crew');
+
+    const afterDeletingFirst = targetedSecond.deleteCampaign(first!.id);
+    expect(afterDeletingFirst.campaigns.map((c) => c.id)).toEqual([second!.id]);
+    expect(afterDeletingFirst.activeCampaignId).toBe(second!.id);
+  });
+
   it('rejects blank names on Workspace.createCampaign', () => {
     expect(() => Workspace.empty().createCampaign('   ')).toThrow(/campaign name cannot be blank/i);
   });

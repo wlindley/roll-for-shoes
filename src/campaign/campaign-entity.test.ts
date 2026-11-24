@@ -153,4 +153,14 @@ describe('Campaign entity & roster management', () => {
     expect(campaign.removeCharacter('char-alice').characters.map((c) => c.name)).toEqual(['Bob']);
     expect(() => campaign.removeCharacter('Charlie')).toThrow(/character not found/i);
   });
+
+  it('requires exact character IDs in findCharacter and removeCharacter while findCharacterByName matches case-insensitively', () => {
+    const alice = Character.create('Alice', { id: 'char-alice' });
+    const campaign = Campaign.create('Heist').addCharacter(alice);
+
+    expect(campaign.findCharacter('Alice')).toBeUndefined();
+    expect(() => campaign.removeCharacter('Alice')).toThrow(/character not found/i);
+    expect(campaign.findCharacterByName('  ALICE  ')).toBe(alice);
+    expect(campaign.removeCharacter('char-alice').characters).toEqual([]);
+  });
 });
