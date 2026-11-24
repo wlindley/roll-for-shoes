@@ -2,10 +2,11 @@ import type React from 'react';
 import { useId, useState } from 'react';
 import type { ScopedDefenderBuilder, Workspace } from '../../campaign';
 import type { CharacterCheckOutcome, OpposedCharacterCheckOutcome, Status } from '../../character';
-import { type CheckOutcome, DifficultyOpposition, DifficultyTier, RolledOpposition, StaticOpposition } from '../../checks';
+import { DifficultyOpposition, DifficultyTier, RolledOpposition, StaticOpposition } from '../../checks';
 import type { DiceRoller, DieValue } from '../../dice';
 import { formatError } from '../error';
 import { normalizePhysicalDice, PhysicalDiceInput } from './PhysicalDiceInput';
+import { RollSummary } from './RollSummary';
 
 export interface CheckRollerPanelProps {
   readonly workspace: Workspace;
@@ -29,20 +30,6 @@ const DIFFICULTY_OPTIONS: readonly { readonly tier: DifficultyTier; readonly lab
   { tier: DifficultyTier.VeryHard, label: 'Very Hard (4d6 / 12)' },
 ];
 
-export function outcomeBadgeClass(outcome: CheckOutcome): string {
-  if (outcome === 'success') return 'badge badge-success';
-  if (outcome === 'tie') return 'badge badge-tie';
-  return 'badge badge-failure';
-}
-
-export function outcomeLabel(outcome: CheckOutcome): string {
-  return outcome === 'tie' ? 'TIE — Twist' : outcome.toUpperCase();
-}
-
-export function DiceRow({ dice }: { readonly dice: readonly DieValue[] }): React.JSX.Element {
-  return <span className="row">{dice.map((d, i) => <span key={i} className={d === 6 ? 'die die-six' : 'die'}>{d}</span>)}</span>;
-}
-
 export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Element {
   const { workspace, diceRoller, selectedActorId, onSelectActor, onChange, onError } = props;
   const campaign = workspace.activeCampaign.campaign;
@@ -50,8 +37,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
 
   const [actorSkillId, setActorSkillId] = useState('');
   const [action, setAction] = useState('');
-  const [actorPhysicalEnabled, setActorPhysicalEnabled] = useState(false);
-  const [actorPhysicalDice, setActorPhysicalDice] = useState<readonly DieValue[]>([]);
+  const [actorPhysicalDice, setActorPhysicalDice] = useState<readonly DieValue[] | null>(null);
   const [mode, setMode] = useState<OppositionMode>('static');
   const [staticTarget, setStaticTarget] = useState('6');
   const [gmDiceCount, setGmDiceCount] = useState('2');
@@ -59,8 +45,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
   const [difficultyMode, setDifficultyMode] = useState<DifficultyMode>('static');
   const [defenderId, setDefenderId] = useState('');
   const [defenderSkillId, setDefenderSkillId] = useState('');
-  const [oppPhysicalEnabled, setOppPhysicalEnabled] = useState(false);
-  const [oppPhysicalDice, setOppPhysicalDice] = useState<readonly DieValue[]>([]);
+  const [oppPhysicalDice, setOppPhysicalDice] = useState<readonly DieValue[] | null>(null);
   const [selectedStatusIds, setSelectedStatusIds] = useState<readonly string[]>([]);
   const [modLabel, setModLabel] = useState('');
   const [modValue, setModValue] = useState('');
@@ -100,7 +85,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       const trimmedAction = action.trim();
       let builder = workspace.activeCampaign.character(actor.id).makeCheck(actorSkill.id);
       if (trimmedAction) builder = builder.withAction(trimmedAction);
-      if (actorPhysicalEnabled) builder = builder.withDiceValues(normalizePhysicalDice(actorPhysicalDice, actorSkill.level));
+      if (actorPhysicalDice !== null) builder = builder.withDiceValues(normalizePhysicalDice(actorPhysicalDice, actorSkill.level));
       if (campaign.rules.statusesEnabled) {
         for (const s of actor.statuses) if (selectedStatusIds.includes(s.id)) builder = builder.withStatus(s.id);
       }
@@ -112,10 +97,10 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       if (mode === 'character') {
         if (!defender || !defenderSkill) return;
         const defStatuses = campaign.rules.statusesEnabled ? defender.statuses.filter((s) => selectedStatusIds.includes(s.id)) : [];
-        const configureDef = (defStatuses.length > 0 || oppPhysicalEnabled)
+        const configureDef = (defStatuses.length > 0 || oppPhysicalDice !== null)
           ? (b: ScopedDefenderBuilder) => {
               const withSts = defStatuses.reduce((acc, s) => acc.withStatus(s.id), b);
-              return oppPhysicalEnabled ? withSts.withDiceValues(normalizePhysicalDice(oppPhysicalDice, defenderSkill.level)) : withSts;
+              return oppPhysicalDice !== null ? withSts.withDiceValues(normalizePhysicalDice(oppPhysicalDice, defenderSkill.level)) : withSts;
             }
           : undefined;
         const res = builder.againstCharacter(defender.id, defenderSkill.id, configureDef).roll(diceRoller);
@@ -127,10 +112,10 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
           mode === 'static'
             ? new StaticOpposition(Number(staticTarget))
             : mode === 'rolled'
-              ? (oppPhysicalEnabled ? RolledOpposition.withDice(count).withDiceValues(normalizePhysicalDice(oppPhysicalDice, count)) : RolledOpposition.withDice(count))
+              ? (oppPhysicalDice !== null ? RolledOpposition.withDice(count).withDiceValues(normalizePhysicalDice(oppPhysicalDice, count)) : RolledOpposition.withDice(count))
               : (difficultyMode === 'static'
                   ? DifficultyOpposition.static(difficultyTier)
-                  : oppPhysicalEnabled
+                  : oppPhysicalDice !== null
                     ? DifficultyOpposition.dynamic(difficultyTier).withDiceValues(normalizePhysicalDice(oppPhysicalDice, difficultyTier))
                     : DifficultyOpposition.dynamic(difficultyTier));
         const res = builder.against(opp).roll(diceRoller);
@@ -140,15 +125,14 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
       setAction('');
       setModLabel('');
       setModValue('');
-      setActorPhysicalDice([]);
-      setOppPhysicalDice([]);
+      setActorPhysicalDice((prev) => (prev === null ? null : []));
+      setOppPhysicalDice((prev) => (prev === null ? null : []));
     } catch (err: unknown) {
       onError(formatError(err, 'Unable to resolve check.'));
     }
   };
 
   const activeRoll = latestRoll?.campaignId === campaign.id ? latestRoll : null;
-  const checkResult = activeRoll?.outcome.checkResult;
   const renderStatusToggles = (label: string, statuses: readonly Status[]) =>
     campaign.rules.statusesEnabled && statuses.length > 0 ? (
       <div className="row" role="group" aria-label={label}>
@@ -174,9 +158,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
         <PhysicalDiceInput
           label="Enter actor physical dice"
           diceCount={actorSkill.level}
-          enabled={actorPhysicalEnabled}
-          values={actorPhysicalDice}
-          onToggle={setActorPhysicalEnabled}
+          value={actorPhysicalDice}
           onChange={setActorPhysicalDice}
         />
         {renderStatusToggles(`${actor.name} statuses`, actor.statuses)}
@@ -215,9 +197,7 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
             <PhysicalDiceInput
               label="Enter opposition physical dice"
               diceCount={oppPoolSize}
-              enabled={oppPhysicalEnabled}
-              values={oppPhysicalDice}
-              onToggle={setOppPhysicalEnabled}
+              value={oppPhysicalDice}
               onChange={setOppPhysicalDice}
             />
           )}
@@ -225,38 +205,26 @@ export function CheckRollerPanel(props: CheckRollerPanelProps): React.JSX.Elemen
         </fieldset>
         <div>
           <button type="submit" className="btn btn-primary" disabled={!canRoll}>
-            {actorPhysicalEnabled ? `Resolve Check (${actorSkill.level}d6)` : `Roll ${actorSkill.level}d6`}
+            {actorPhysicalDice !== null ? `Resolve Check (${actorSkill.level}d6)` : `Roll ${actorSkill.level}d6`}
           </button>
         </div>
       </form>
-      {activeRoll && checkResult && (
+      {activeRoll && (
         <output className="stack" aria-live="polite">
-          <div className="row-between">
-            <strong className="roll-title">
-              {activeRoll.kind === 'vs_opposition'
+          <RollSummary
+            title={
+              activeRoll.kind === 'vs_opposition'
                 ? `${activeRoll.outcome.character.name} — ${activeRoll.outcome.skillUsed.name}`
-                : `${activeRoll.outcome.actor.name} (${activeRoll.outcome.actorSkill.name}) vs ${activeRoll.outcome.defender.name} (${activeRoll.outcome.defenderSkill.name})`}
-            </strong>
-            <span className={outcomeBadgeClass(checkResult.outcome)}>
-              {outcomeLabel(checkResult.outcome)} (margin {checkResult.margin > 0 ? `+${checkResult.margin}` : checkResult.margin})
-            </span>
-          </div>
-          {checkResult.outcome === 'tie' && (
-            <p className="twist-banner">
-              TIE — Partial Success with Twist (0 XP): Accomplish your goal barely, with an unexpected twist or minor consequence.
-            </p>
-          )}
-          <div className="row">
-            <span>Actor:</span>
-            <DiceRow dice={checkResult.actor.rawDice} />
-            <span className="badge">Total {checkResult.actor.finalTotal} (raw {checkResult.actor.rawTotal})</span>
-            <span>vs</span>
-            {checkResult.opposition.kind === 'rolled' && <DiceRow dice={checkResult.opposition.pool.rawDice} />}
-            <span className="badge">{checkResult.opposition.kind === 'rolled' ? 'Opposition' : 'Target'} {checkResult.opposition.total}</span>
-          </div>
-          <p className="muted">
-            {activeRoll.kind === 'vs_opposition' ? `XP earned: +${activeRoll.outcome.xpEarned} XP` : `XP earned: ${activeRoll.outcome.actor.name} +${activeRoll.outcome.actorXpEarned} XP, ${activeRoll.outcome.defender.name} +${activeRoll.outcome.defenderXpEarned} XP`}
-          </p>
+                : `${activeRoll.outcome.actor.name} (${activeRoll.outcome.actorSkill.name}) vs ${activeRoll.outcome.defender.name} (${activeRoll.outcome.defenderSkill.name})`
+            }
+            checkResult={activeRoll.outcome.checkResult}
+            xpText={
+              activeRoll.kind === 'vs_opposition'
+                ? `XP earned: +${activeRoll.outcome.xpEarned} XP`
+                : `XP earned: ${activeRoll.outcome.actor.name} +${activeRoll.outcome.actorXpEarned} XP, ${activeRoll.outcome.defender.name} +${activeRoll.outcome.defenderXpEarned} XP`
+            }
+            showTwistBanner
+          />
         </output>
       )}
     </section>

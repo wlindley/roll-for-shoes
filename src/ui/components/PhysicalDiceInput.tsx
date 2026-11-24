@@ -12,24 +12,25 @@ export function normalizePhysicalDice(dice: readonly DieValue[], count: number):
 export interface PhysicalDiceInputProps {
   readonly label: string;
   readonly diceCount: number;
-  readonly enabled: boolean;
-  readonly values: readonly DieValue[];
-  readonly onToggle: (enabled: boolean) => void;
-  readonly onChange: (nextValues: readonly DieValue[]) => void;
+  readonly value: readonly DieValue[] | null;
+  readonly onChange: (next: readonly DieValue[] | null) => void;
 }
 
-export function PhysicalDiceInput(props: PhysicalDiceInputProps): React.JSX.Element {
-  const { label, diceCount, enabled, values, onToggle, onChange } = props;
+export function PhysicalDiceInput({ label, diceCount, value, onChange }: PhysicalDiceInputProps): React.JSX.Element {
   const baseId = useId();
-  const current = normalizePhysicalDice(values, diceCount);
+  const current = value === null ? null : normalizePhysicalDice(value, diceCount);
 
   return (
     <div className="row">
       <label className="field-inline">
-        <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={current !== null}
+          onChange={(e) => onChange(e.target.checked ? normalizePhysicalDice([], diceCount) : null)}
+        />
         {label}
       </label>
-      {enabled && (
+      {current !== null && (
         <div className="row" role="group" aria-label={`${label} (${current.length}d6)`}>
           {current.map((val, idx) => (
             <select

@@ -3,7 +3,7 @@ import { useId, useState } from 'react';
 import type { Workspace } from '../../campaign';
 import type { Character, PendingAdvancement } from '../../character';
 import { formatError } from '../error';
-import { DiceRow } from './CheckRollerPanel';
+import { DiceRow } from './DiceRow';
 
 export interface AdvancementPromptProps {
   readonly workspace: Workspace;
